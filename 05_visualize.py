@@ -352,14 +352,14 @@ code { font-size: 14px; background: #f5f5f5; padding: 2px 6px; border-radius: 3p
     <tr><th>Tool</th><th>Role</th></tr>
   </thead>
   <tbody>
-    <tr><td>Cohere <code>embed-v4.0</code></td><td>README text embedding (512 dimensions)</td></tr>
-    <tr><td>PCA</td><td>Pre-reduction from 512 to 256 dimensions</td></tr>
-    <tr><td>UMAP</td><td>Dimensionality reduction from 256D to 2D</td></tr>
-    <tr><td>Toponymy</td><td>Hierarchical density-based topic clustering</td></tr>
-    <tr><td>DataMapPlot</td><td>Interactive HTML map rendering</td></tr>
-    <tr><td>Claude Haiku</td><td>README summarization</td></tr>
-    <tr><td>Claude Sonnet</td><td>Topic label generation</td></tr>
-    <tr><td>GitHub API</td><td>Repository data and README fetching</td></tr>
+    <tr><td><a href="https://docs.cohere.com/reference/embed">Cohere <code>embed-v4.0</code></a></td><td>README text embedding (512 dimensions)</td></tr>
+    <tr><td><a href="https://en.wikipedia.org/wiki/Principal_component_analysis">PCA</a></td><td>Pre-reduction from 512 to 256 dimensions</td></tr>
+    <tr><td><a href="https://github.com/lmcinnes/umap">UMAP</a></td><td>Dimensionality reduction from 256D to 2D</td></tr>
+    <tr><td><a href="https://github.com/TutteInstitute/toponymy">Toponymy</a></td><td>Hierarchical density-based topic clustering</td></tr>
+    <tr><td><a href="https://github.com/TutteInstitute/datamapplot">DataMapPlot</a></td><td>Interactive HTML map rendering</td></tr>
+    <tr><td><a href="https://www.anthropic.com/claude/haiku">Claude Haiku</a></td><td>README summarization</td></tr>
+    <tr><td><a href="https://www.anthropic.com/claude/sonnet">Claude Sonnet</a></td><td>Topic label generation</td></tr>
+    <tr><td><a href="https://docs.github.com/en/rest">GitHub API</a></td><td>Repository data and README fetching</td></tr>
   </tbody>
 </table>
 
