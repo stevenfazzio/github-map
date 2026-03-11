@@ -156,72 +156,81 @@ def run_experiments(df, embeddings, documents):
         print(f"Running experiment: {name} (PCA dims: {pca_dims or 'None'})")
         print(f"{'='*60}")
 
-        # Step 1: PCA + UMAP
-        coords, pca_info = reduce_embeddings(embeddings, pca_dims)
-        all_pca_info[name] = pca_info
+        try:
+            # Step 1: PCA + UMAP
+            coords, pca_info = reduce_embeddings(embeddings, pca_dims)
+            all_pca_info[name] = pca_info
 
-        # Step 2: Cluster on 2D coords, but use original 512d embeddings for exemplars
-        clusterer = ToponymyClusterer(min_clusters=cfg["min_clusters"])
-        clusterer.fit(clusterable_vectors=coords, embedding_vectors=embeddings)
+            # Step 2: Cluster on 2D coords, but use original 512d embeddings for exemplars
+            clusterer = ToponymyClusterer(min_clusters=cfg["min_clusters"])
+            clusterer.fit(clusterable_vectors=coords, embedding_vectors=embeddings)
 
-        # Log cluster counts per layer
-        for li, layer in enumerate(clusterer.cluster_layers_):
-            n_clusters = len(set(layer.labels_)) - (1 if -1 in layer.labels_ else 0)
-            print(f"  Layer {li}: {n_clusters} clusters")
+            # Log cluster counts per layer
+            for li, layer in enumerate(clusterer.cluster_layers_):
+                n_clusters = len(set(layer.cluster_labels)) - (1 if -1 in layer.cluster_labels else 0)
+                print(f"  Layer {li}: {n_clusters} clusters")
 
-        # Step 3: Fit Toponymy
-        topic_model = Toponymy(
-            llm_wrapper=cfg["llm"],
-            text_embedding_model=cfg["embedder"],
-            clusterer=clusterer,
-            object_description=cfg["object_description"],
-            corpus_description=cfg["corpus_description"],
-            exemplar_delimiters=cfg["exemplar_delimiters"],
-            lowest_detail_level=cfg["lowest_detail_level"],
-            highest_detail_level=cfg["highest_detail_level"],
-        )
-        topic_model.fit(
-            objects=documents,
-            embedding_vectors=embeddings,
-            clusterable_vectors=coords,
-        )
+            # Step 3: Fit Toponymy
+            topic_model = Toponymy(
+                llm_wrapper=cfg["llm"],
+                text_embedding_model=cfg["embedder"],
+                clusterer=clusterer,
+                object_description=cfg["object_description"],
+                corpus_description=cfg["corpus_description"],
+                exemplar_delimiters=cfg["exemplar_delimiters"],
+                lowest_detail_level=cfg["lowest_detail_level"],
+                highest_detail_level=cfg["highest_detail_level"],
+            )
+            topic_model.fit(
+                objects=documents,
+                embedding_vectors=embeddings,
+                clusterable_vectors=coords,
+            )
 
-        models[name] = topic_model
+            models[name] = topic_model
 
-        # Save per-experiment outputs
-        exp_dir = PCA_EXPERIMENTS_DIR / name
-        exp_dir.mkdir(exist_ok=True)
+            # Save per-experiment outputs
+            exp_dir = PCA_EXPERIMENTS_DIR / name
+            exp_dir.mkdir(exist_ok=True)
 
-        coarse_labels, fine_labels = extract_labels(topic_model, documents)
-        labels_df = pd.DataFrame({
-            "full_name": df["full_name"],
-            "coarse_label": coarse_labels,
-            "fine_label": fine_labels,
-        })
-        labels_df.to_parquet(exp_dir / "labels.parquet", index=False)
-        print(f"  Saved labels to {exp_dir / 'labels.parquet'}")
+            coarse_labels, fine_labels = extract_labels(topic_model, documents)
+            labels_df = pd.DataFrame({
+                "full_name": df["full_name"],
+                "coarse_label": coarse_labels,
+                "fine_label": fine_labels,
+            })
+            labels_df.to_parquet(exp_dir / "labels.parquet", index=False)
+            print(f"  Saved labels to {exp_dir / 'labels.parquet'}")
 
-        export_audit_excel(topic_model, filename=str(exp_dir / "audit.xlsx"))
-        print(f"  Saved audit to {exp_dir / 'audit.xlsx'}")
+            export_audit_excel(topic_model, filename=str(exp_dir / "audit.xlsx"))
+            print(f"  Saved audit to {exp_dir / 'audit.xlsx'}")
 
-        # Save PCA info
-        if pca_info:
-            pd.DataFrame([pca_info]).to_csv(exp_dir / "pca_info.csv", index=False)
+            # Save coords for visualization
+            np.savez(exp_dir / "umap_coords.npz", coords=coords)
 
-        # Save disambiguation stats
-        disambig_rows = []
-        for li, layer in enumerate(topic_model.cluster_layers_):
-            indices = getattr(layer, "dismbiguation_topic_indices", None)
-            if indices is not None:
-                disambig_rows.append({
-                    "layer": li,
-                    "num_groups": len(indices),
-                    "topics_renamed": sum(len(g) for g in indices),
-                    "total_topics": len(layer.topic_names),
-                })
-        if disambig_rows:
-            pd.DataFrame(disambig_rows).to_csv(exp_dir / "disambiguation.csv", index=False)
-            print(f"  Saved disambiguation stats to {exp_dir / 'disambiguation.csv'}")
+            # Save PCA info
+            if pca_info:
+                pd.DataFrame([pca_info]).to_csv(exp_dir / "pca_info.csv", index=False)
+
+            # Save disambiguation stats
+            disambig_rows = []
+            for li, layer in enumerate(topic_model.cluster_layers_):
+                indices = getattr(layer, "dismbiguation_topic_indices", None)
+                if indices is not None:
+                    disambig_rows.append({
+                        "layer": li,
+                        "num_groups": len(indices),
+                        "topics_renamed": sum(len(g) for g in indices),
+                        "total_topics": len(layer.topic_names),
+                    })
+            if disambig_rows:
+                pd.DataFrame(disambig_rows).to_csv(exp_dir / "disambiguation.csv", index=False)
+                print(f"  Saved disambiguation stats to {exp_dir / 'disambiguation.csv'}")
+
+        except Exception as e:
+            print(f"\n  ERROR in experiment {name}: {e}")
+            print(f"  Skipping to next experiment...")
+            all_pca_info.setdefault(name, None)
 
     return models, all_pca_info
 
@@ -283,7 +292,7 @@ def compare_experiments(models, documents, all_pca_info):
     for name, model in models.items():
         counts = []
         for li, layer in enumerate(model.cluster_layers_):
-            n_clusters = len(set(layer.labels_)) - (1 if -1 in layer.labels_ else 0)
+            n_clusters = len(set(layer.cluster_labels)) - (1 if -1 in layer.cluster_labels else 0)
             counts.append(f"layer {li}: {n_clusters}")
         print(f"  {name}: {', '.join(counts)}")
 
