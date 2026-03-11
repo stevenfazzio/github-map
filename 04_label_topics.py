@@ -80,8 +80,8 @@ def main():
     fine_labels = []
 
     if n_layers >= 2:
-        coarse_layer = topic_model.cluster_layers_[0]
-        fine_layer = topic_model.cluster_layers_[-1]
+        coarse_layer = topic_model.cluster_layers_[-1]
+        fine_layer = topic_model.cluster_layers_[0]
     elif n_layers == 1:
         coarse_layer = topic_model.cluster_layers_[0]
         fine_layer = topic_model.cluster_layers_[0]

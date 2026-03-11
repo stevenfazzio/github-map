@@ -98,8 +98,8 @@ def extract_labels(model, documents):
     if n_layers == 0:
         raise ValueError("No cluster layers found")
 
-    coarse_layer = model.cluster_layers_[0]
-    fine_layer = model.cluster_layers_[-1]
+    coarse_layer = model.cluster_layers_[-1]
+    fine_layer = model.cluster_layers_[0]
 
     coarse_labels = [coarse_layer.topic_name_vector[i] for i in range(len(documents))]
     fine_labels = [fine_layer.topic_name_vector[i] for i in range(len(documents))]
@@ -187,7 +187,7 @@ def print_audit_summary(name, model):
 
     n_layers = len(model.cluster_layers_)
     for layer_idx in range(n_layers):
-        label = ["coarse", "mid", "fine"][layer_idx] if n_layers == 3 else f"layer {layer_idx}"
+        label = ["fine", "mid", "coarse"][layer_idx] if n_layers == 3 else f"layer {layer_idx}"
         comp = create_comparison_df(model, layer_index=layer_idx)
         lengths = comp["Final LLM Topic Name"].astype(str).str.len()
         print(f"  Avg topic name length ({label}): {lengths.mean():.1f} chars "
@@ -195,7 +195,7 @@ def print_audit_summary(name, model):
 
     # Disambiguation effort: how many topic groups needed renaming per layer
     for layer_idx in range(n_layers):
-        label = ["coarse", "mid", "fine"][layer_idx] if n_layers == 3 else f"layer {layer_idx}"
+        label = ["fine", "mid", "coarse"][layer_idx] if n_layers == 3 else f"layer {layer_idx}"
         layer = model.cluster_layers_[layer_idx]
         indices = getattr(layer, "dismbiguation_topic_indices", None)
         if indices is not None:
@@ -208,7 +208,7 @@ def print_audit_summary(name, model):
             print(f"  Disambiguation ({label}): no data (attribute not found)")
 
     for layer_idx in [0, -1]:
-        label = "coarse" if layer_idx == 0 else "fine"
+        label = "fine" if layer_idx == 0 else "coarse"
         kp_df = create_keyphrase_analysis_df(model, layer_index=layer_idx)
         if "keyphrase_in_topic" in kp_df.columns:
             rate = kp_df["keyphrase_in_topic"].mean()
