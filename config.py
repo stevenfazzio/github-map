@@ -1,0 +1,32 @@
+"""Shared paths, constants, and env var loading."""
+
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Load centralized credentials, then project-local overrides
+load_dotenv(Path.home() / ".config" / "data-apis" / ".env")
+load_dotenv(override=True)
+
+# ── Directories ──────────────────────────────────────────────────────────────
+DATA_DIR = Path("data")
+DATA_DIR.mkdir(exist_ok=True)
+
+# ── File paths ───────────────────────────────────────────────────────────────
+REPOS_PARQUET = DATA_DIR / "repos.parquet"
+EMBEDDINGS_NPZ = DATA_DIR / "embeddings.npz"
+UMAP_COORDS_NPZ = DATA_DIR / "umap_coords.npz"
+TOPONYMY_MODEL_JOBLIB = DATA_DIR / "toponymy_model.joblib"
+LABELS_PARQUET = DATA_DIR / "labels.parquet"
+GITHUB_MAP_HTML = DATA_DIR / "github_map.html"
+
+# ── API keys ─────────────────────────────────────────────────────────────────
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+CO_API_KEY = os.environ.get("CO_API_KEY", "")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+
+# ── Constants ────────────────────────────────────────────────────────────────
+TARGET_REPO_COUNT = 1_000
+COHERE_BATCH_SIZE = 96
+COHERE_EMBED_DIMENSION = 512

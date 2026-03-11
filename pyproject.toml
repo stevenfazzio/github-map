@@ -1,0 +1,21 @@
+[project]
+name = "github-analysis"
+version = "0.1.0"
+description = "Fetch top 1K GitHub repos, embed READMEs, reduce to 2D, label topics, and visualize"
+requires-python = ">=3.10"
+dependencies = [
+    "requests",
+    "pandas",
+    "pyarrow",
+    "cohere",
+    "numpy",
+    "umap-learn",
+    "toponymy",
+    "anthropic",
+    "datamapplot",
+    "glasbey",
+    "joblib",
+    "tqdm",
+    "python-dotenv",
+    "sentence-transformers",
+]
