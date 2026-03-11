@@ -258,16 +258,12 @@ def main():
                     if col not in r:
                         r[col] = val
             new_rows[name] = r
-        # Keep old rows not in the new fetch
-        for name, row in existing_rows.items():
-            if name not in new_rows:
-                # Backfill missing columns with defaults
-                for col, default in _NEW_COLUMN_DEFAULTS.items():
-                    if col not in row:
-                        row[col] = default
-                new_rows[name] = row
+        # Drop old rows not in the fresh fetch (they've fallen out of the top N)
+        dropped = len(existing_rows) - sum(1 for n in existing_rows if n in new_rows)
+        if dropped:
+            print(f"Dropped {dropped} repos no longer in top {TARGET_REPO_COUNT}")
         rows = list(new_rows.values())
-        print(f"Total repos: {len(rows)} ({len(repo_list)} fresh + {len(rows) - len(repo_list)} retained)")
+        print(f"Total repos: {len(rows)}")
     else:
         rows = list(existing_rows.values())
         print("All repos already fetched, nothing to do")
