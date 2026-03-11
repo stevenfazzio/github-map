@@ -130,6 +130,8 @@ def main():
                 "cmap": "viridis",
             },
         ],
+        title="GitHub Map",
+        sub_title="Top 1,000 most-starred repositories, mapped by README similarity",
         enable_search=True,
         darkmode=False,
     )
@@ -171,15 +173,28 @@ def _inject_nav(html_path):
     # Inject after <body> tag
     html = html.replace("<body>", f"<body>{nav_css}{nav_html}", 1)
 
-    # Push body content below the fixed nav bar
+    # Offset the fixed deck-container below the nav bar
+    html = html.replace(
+        "position: fixed; z-index: -1; top: 0; left: 0; width: 100%; height: 100%;",
+        "position: fixed; z-index: -1; top: 44px; left: 0; width: 100%; height: calc(100% - 44px);",
+        1,
+    )
+
+    # Shrink body and content to account for nav bar height
     html = html.replace(
         "overflow: hidden;",
-        "overflow: hidden; padding-top: 44px;",
+        "overflow: hidden; padding-top: 44px; height: calc(100vh - 44px);",
         1,
     )
     html = html.replace(
         "height: 100vh;",
         "height: calc(100vh - 44px);",
+        1,
+    )
+    # Adjust content-wrapper min-height so bottom-left stays in viewport
+    html = html.replace(
+        "min-height:calc(100vh - 16px)",
+        "min-height:calc(100vh - 60px)",
         1,
     )
 
