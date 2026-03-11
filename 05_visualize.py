@@ -20,8 +20,10 @@ def main():
     fine_labels = labels_df["fine_label"].values
 
     # ── Hover text ───────────────────────────────────────────────────────────
+    has_summary = "summary" in df.columns
     hover_text = [
         f"{row['full_name']}\n⭐ {row['stargazers_count']:,} | {row['language'] or 'N/A'}"
+        + (f"\n\n{row['summary']}" if has_summary and row.get("summary") else "")
         for _, row in df.iterrows()
     ]
 

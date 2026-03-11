@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from toponymy import Toponymy, ToponymyClusterer
 from toponymy.llm_wrappers import AsyncAnthropicNamer
-from sentence_transformers import SentenceTransformer
+from toponymy.embedding_wrappers import CohereEmbedder
 
 # Workaround: nested asyncio.run() calls fail with "Event loop is closed".
 # nest_asyncio patches the loop to allow re-entrant calls.
@@ -15,6 +15,7 @@ nest_asyncio.apply()
 
 from config import (
     ANTHROPIC_API_KEY,
+    CO_API_KEY,
     EMBEDDINGS_NPZ,
     LABELS_PARQUET,
     REPOS_PARQUET,
@@ -29,25 +30,31 @@ def main():
     embeddings = np.load(EMBEDDINGS_NPZ)["embeddings"]
     coords = np.load(UMAP_COORDS_NPZ)["coords"]
 
-    # Truncate READMEs to ~8K chars (~2K tokens) to stay within LLM context limits
-    # when Toponymy batches multiple exemplars into a single prompt
+    # Use LLM-generated summaries if available (from 01b_summarize_readmes.py),
+    # falling back to truncated READMEs
     MAX_README_CHARS = 2_000
+    has_summary = "summary" in df.columns
 
-    readmes = []
+    documents = []
     for _, row in df.iterrows():
-        text = row["readme"].strip() if isinstance(row["readme"], str) else ""
+        text = ""
+        if has_summary and isinstance(row.get("summary"), str):
+            text = row["summary"].strip()
+        if not text:
+            text = row["readme"].strip() if isinstance(row["readme"], str) else ""
+            text = text[:MAX_README_CHARS]
         if not text:
             text = row["description"].strip() if isinstance(row["description"], str) else ""
         if not text:
             text = row["full_name"]
-        readmes.append(text[:MAX_README_CHARS])
+        documents.append(text)
 
-    print(f"Loaded {len(readmes)} documents")
+    print(f"Loaded {len(documents)} documents")
 
     # Set up Toponymy components
     llm = AsyncAnthropicNamer(api_key=ANTHROPIC_API_KEY, model="claude-sonnet-4-20250514")
-    embedder = SentenceTransformer("all-MiniLM-L6-v2")
-    clusterer = ToponymyClusterer(min_clusters=4, max_layers=2)
+    embedder = CohereEmbedder(api_key=CO_API_KEY, model="embed-v4.0")
+    clusterer = ToponymyClusterer(min_clusters=4)
 
     # Fit clusterer
     clusterer.fit(clusterable_vectors=coords, embedding_vectors=embeddings)
@@ -57,12 +64,12 @@ def main():
         llm_wrapper=llm,
         text_embedding_model=embedder,
         clusterer=clusterer,
-        object_description="GitHub repository READMEs",
+        object_description="GitHub repository descriptions",
         corpus_description="collection of the top 1,000 most-starred GitHub repositories",
         exemplar_delimiters=['    * """', '"""\n'],
     )
     topic_model.fit(
-        objects=readmes,
+        objects=documents,
         embedding_vectors=embeddings,
         clusterable_vectors=coords,
     )
@@ -81,7 +88,7 @@ def main():
     else:
         raise ValueError("No cluster layers found")
 
-    for i in range(len(readmes)):
+    for i in range(len(documents)):
         coarse_labels.append(coarse_layer.topic_name_vector[i])
         fine_labels.append(fine_layer.topic_name_vector[i])
 
