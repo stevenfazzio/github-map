@@ -231,7 +231,7 @@ def compare_experiments(models, documents):
 
     # Build comparison workbook
     with pd.ExcelWriter(EXPERIMENTS_DIR / "comparison.xlsx", engine="openpyxl") as writer:
-        for layer_idx, label in [(0, "coarse"), (-1, "fine")]:
+        for layer_idx, label in [(0, "fine"), (-1, "coarse")]:
             rows = []
             for name, model in models.items():
                 comp = create_comparison_df(model, layer_index=layer_idx)
