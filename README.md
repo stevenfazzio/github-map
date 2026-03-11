@@ -1,5 +1,7 @@
 # GitHub Map
 
+**[View the live map](https://stevenfazzio.github.io/github-map/)**
+
 An interactive 2D map of the top 1,000 most-starred GitHub repositories, positioned by semantic similarity of their READMEs.
 
 The pipeline fetches repo metadata, embeds READMEs with Cohere, reduces to 2D with PCA + UMAP, generates topic labels with Claude, and renders an interactive HTML visualization with DataMapPlot.
