@@ -44,7 +44,7 @@ repos.parquet ──┬──> embeddings.npz ──> umap_coords.npz ──> la
 
 **Key technology choices:**
 - Cohere `embed-v4.0` (512-dim) for README embeddings
-- UMAP (n_neighbors=15, min_dist=0.05, cosine) for dimensionality reduction
+- UMAP (n_neighbors=15, min_dist=0.05, cosine) for dimensionality reduction (512D → 2D)
 - Toponymy library for hierarchical topic clustering with LLM-generated labels
 - DataMapPlot for the final interactive HTML visualization
 - Claude Haiku for README summarization, Claude Sonnet for topic naming

@@ -131,9 +131,8 @@ code { font-size: 14px; background: #f5f5f5; padding: 2px 6px; border-radius: 3p
 
 <div class="pipeline-step">
   <strong>4. Reduce to 2D</strong>
-  <p><code>03_reduce_umap.py</code> &mdash; Applies PCA to reduce from 512 to 256 dimensions,
-  then UMAP (n_neighbors=15, min_dist=0.05, cosine metric) to project down to 2D coordinates
-  in <code>umap_coords.npz</code>.</p>
+  <p><code>03_reduce_umap.py</code> &mdash; Applies UMAP (n_neighbors=15, min_dist=0.05, cosine metric)
+  to project from 512D to 2D coordinates in <code>umap_coords.npz</code>.</p>
 </div>
 
 <div class="pipeline-step">
@@ -157,8 +156,7 @@ code { font-size: 14px; background: #f5f5f5; padding: 2px 6px; border-radius: 3p
   </thead>
   <tbody>
     <tr><td><a href="https://docs.cohere.com/reference/embed">Cohere <code>embed-v4.0</code></a></td><td>README text embedding (512 dimensions)</td></tr>
-    <tr><td><a href="https://en.wikipedia.org/wiki/Principal_component_analysis">PCA</a></td><td>Pre-reduction from 512 to 256 dimensions</td></tr>
-    <tr><td><a href="https://github.com/lmcinnes/umap">UMAP</a></td><td>Dimensionality reduction from 256D to 2D</td></tr>
+    <tr><td><a href="https://github.com/lmcinnes/umap">UMAP</a></td><td>Dimensionality reduction from 512D to 2D</td></tr>
     <tr><td><a href="https://github.com/TutteInstitute/toponymy">Toponymy</a></td><td>Hierarchical density-based topic clustering</td></tr>
     <tr><td><a href="https://github.com/TutteInstitute/datamapplot">DataMapPlot</a></td><td>Interactive HTML map rendering</td></tr>
     <tr><td><a href="https://www.anthropic.com/claude/haiku">Claude Haiku</a></td><td>README summarization</td></tr>
