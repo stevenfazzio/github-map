@@ -35,3 +35,6 @@ ANTHROPIC_MODEL_SUMMARIZE = "claude-haiku-4-5"
 # ── Experiments ─────────────────────────────────────────────────────────────
 EXPERIMENTS_DIR = DATA_DIR / "experiments"
 EXPERIMENTS_DIR.mkdir(exist_ok=True)
+
+PCA_EXPERIMENTS_DIR = EXPERIMENTS_DIR / "pca"
+PCA_EXPERIMENTS_DIR.mkdir(exist_ok=True)
