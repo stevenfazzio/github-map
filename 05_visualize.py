@@ -47,7 +47,35 @@ def main():
     license_palette = glasbey.create_palette(palette_size=len(unique_licenses))
     license_color_mapping = dict(zip(unique_licenses, license_palette))
 
-    # 4. Repo Age (continuous, years since creation)
+    # 4. License Family (categorical, grouped from License Type)
+    license_to_family = {
+        "AGPL-3.0": "GPL",
+        "GPL-2.0": "GPL",
+        "GPL-3.0": "GPL",
+        "LGPL-3.0": "GPL",
+        "BSD-2-Clause": "BSD",
+        "BSD-3-Clause": "BSD",
+        "CC-BY-4.0": "Creative Commons",
+        "CC-BY-SA-4.0": "Creative Commons",
+        "CC0-1.0": "Creative Commons",
+        "Apache-2.0": "Apache",
+        "MIT": "MIT",
+        "MPL-2.0": "MPL",
+        "ISC": "Other Permissive",
+        "Unlicense": "Other Permissive",
+        "WTFPL": "Other Permissive",
+        "Zlib": "Other Permissive",
+        "Vim": "Other Permissive",
+        "OFL-1.1": "Other Permissive",
+        "NOASSERTION": "Unknown/None",
+        "None": "Unknown/None",
+    }
+    license_families = np.array([license_to_family.get(l, "Unknown/None") for l in licenses])
+    unique_families = sorted(set(license_families))
+    family_palette = glasbey.create_palette(palette_size=len(unique_families))
+    family_color_mapping = dict(zip(unique_families, family_palette))
+
+    # 5. Repo Age (continuous, years since creation)
     now = datetime.now(tz=timezone.utc)
     repo_ages = np.array(
         [(now - pd.to_datetime(d, utc=True).to_pydatetime()).days / 365.25 for d in df["created_at"]]
@@ -64,13 +92,14 @@ def main():
         marker_size_array=marker_sizes,
         extra_point_data=extra_data,
         on_click="window.open(`https://github.com/{full_name}`, '_blank')",
-        colormap_rawdata=[languages, star_counts, licenses, repo_ages],
+        colormap_rawdata=[languages, star_counts, licenses, license_families, repo_ages],
         colormap_metadata=[
             {
                 "field": "language",
                 "description": "Primary Language",
                 "kind": "categorical",
                 "color_mapping": lang_color_mapping,
+                "show_legend": True,
             },
             {
                 "field": "stars",
@@ -83,6 +112,12 @@ def main():
                 "description": "License Type",
                 "kind": "categorical",
                 "color_mapping": license_color_mapping,
+            },
+            {
+                "field": "license_family",
+                "description": "License Family",
+                "kind": "categorical",
+                "color_mapping": family_color_mapping,
             },
             {
                 "field": "age",
