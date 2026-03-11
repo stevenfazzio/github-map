@@ -32,8 +32,11 @@ def main():
 
     # ── Colormap raw data ────────────────────────────────────────────────────
 
-    # 1. Primary Language (categorical)
-    languages = df["language"].fillna("").replace("", "Other").values
+    # 1. Primary Language (categorical, top 9 + Other)
+    raw_languages = df["language"].fillna("Other").replace("", "Other")
+    non_other = raw_languages[raw_languages != "Other"]
+    top_languages = non_other.value_counts().head(9).index.tolist()
+    languages = raw_languages.where(raw_languages.isin(top_languages), "Other").values
     unique_langs = sorted(set(languages))
     lang_palette = glasbey.create_palette(palette_size=len(unique_langs))
     lang_color_mapping = dict(zip(unique_langs, lang_palette))
@@ -99,7 +102,6 @@ def main():
                 "description": "Primary Language",
                 "kind": "categorical",
                 "color_mapping": lang_color_mapping,
-                "show_legend": True,
             },
             {
                 "field": "stars",
@@ -126,6 +128,7 @@ def main():
                 "cmap": "viridis",
             },
         ],
+        enable_search=True,
         darkmode=False,
     )
     fig.save(str(GITHUB_MAP_HTML))
