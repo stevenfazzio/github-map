@@ -54,12 +54,16 @@ def main():
     )
 
     # ── Build the interactive plot ───────────────────────────────────────────
+    extra_data = pd.DataFrame({"full_name": df["full_name"].values})
+
     fig = datamapplot.create_interactive_plot(
         coords,
         coarse_labels,
         fine_labels,
         hover_text=hover_text,
         marker_size_array=marker_sizes,
+        extra_point_data=extra_data,
+        on_click="window.open(`https://github.com/{full_name}`, '_blank')",
         colormap_rawdata=[languages, star_counts, licenses, repo_ages],
         colormap_metadata=[
             {
