@@ -20,6 +20,7 @@ UMAP_COORDS_NPZ = DATA_DIR / "umap_coords.npz"
 TOPONYMY_MODEL_JOBLIB = DATA_DIR / "toponymy_model.joblib"
 LABELS_PARQUET = DATA_DIR / "labels.parquet"
 GITHUB_MAP_HTML = DATA_DIR / "github_map.html"
+METHODOLOGY_HTML = DATA_DIR / "methodology.html"
 
 # ── API keys ─────────────────────────────────────────────────────────────────
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
