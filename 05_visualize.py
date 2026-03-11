@@ -127,7 +127,7 @@ def main():
                 "field": "age",
                 "description": "Repo Age (years)",
                 "kind": "continuous",
-                "cmap": "viridis",
+                "cmap": "viridis_r",
             },
         ],
         title="GitHub Map",
