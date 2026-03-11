@@ -31,3 +31,7 @@ TARGET_REPO_COUNT = 1_000
 COHERE_BATCH_SIZE = 96
 COHERE_EMBED_DIMENSION = 512
 ANTHROPIC_MODEL_SUMMARIZE = "claude-haiku-4-5"
+
+# ── Experiments ─────────────────────────────────────────────────────────────
+EXPERIMENTS_DIR = DATA_DIR / "experiments"
+EXPERIMENTS_DIR.mkdir(exist_ok=True)
