@@ -34,7 +34,7 @@ CO_API_KEY = os.environ.get("CO_API_KEY", "")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
 # ── Constants ────────────────────────────────────────────────────────────────
-TARGET_REPO_COUNT = 1_000
+TARGET_REPO_COUNT = 10_000
 COHERE_BATCH_SIZE = 96
 COHERE_EMBED_DIMENSION = 512
 ANTHROPIC_MODEL_SUMMARIZE = "claude-haiku-4-5"
