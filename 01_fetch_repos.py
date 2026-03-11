@@ -14,11 +14,11 @@ HEADERS = {
     "Authorization": f"Bearer {GITHUB_TOKEN}",
     "Content-Type": "application/json",
 }
-PER_PAGE = 100
+PER_PAGE = 10  # GitHub GraphQL 502s with large batches due to README blob lookups
 
 QUERY = """
 query ($queryString: String!, $cursor: String) {
-  search(query: $queryString, type: REPOSITORY, first: 100, after: $cursor) {
+  search(query: $queryString, type: REPOSITORY, first: 10, after: $cursor) {
     pageInfo { hasNextPage endCursor }
     edges {
       node {
@@ -52,9 +52,6 @@ query ($queryString: String!, $cursor: String) {
           }
           readme_md: object(expression: "HEAD:README.md") { ... on Blob { text } }
           readme_lower: object(expression: "HEAD:readme.md") { ... on Blob { text } }
-          readme_rst: object(expression: "HEAD:README.rst") { ... on Blob { text } }
-          readme_txt: object(expression: "HEAD:README.txt") { ... on Blob { text } }
-          readme_noext: object(expression: "HEAD:README") { ... on Blob { text } }
         }
       }
     }
@@ -108,7 +105,7 @@ def _graphql_query(query: str, variables: dict, max_retries: int = 5) -> dict:
 
 def _extract_readme(node: dict) -> str:
     """Extract README text from GraphQL aliases, taking the first non-null."""
-    for key in ("readme_md", "readme_lower", "readme_rst", "readme_txt", "readme_noext"):
+    for key in ("readme_md", "readme_lower"):
         obj = node.get(key)
         if obj and obj.get("text"):
             return obj["text"]
@@ -232,32 +229,48 @@ _NEW_COLUMN_DEFAULTS = {
 
 def main():
     # Resume support: load existing progress
-    existing = set()
+    existing_rows = {}  # full_name -> row dict
+    needs_refresh = False
     if REPOS_PARQUET.exists():
         df_existing = pd.read_parquet(REPOS_PARQUET)
-        # Backfill missing new columns with defaults
-        for col, default in _NEW_COLUMN_DEFAULTS.items():
-            if col not in df_existing.columns:
-                df_existing[col] = default
-        existing = set(df_existing["full_name"])
-        rows = df_existing.to_dict("records")
-        print(f"Resuming: {len(rows)} repos already fetched")
+        # Detect if old data is missing new columns (needs full refresh)
+        missing_cols = [c for c in _NEW_COLUMN_DEFAULTS if c not in df_existing.columns]
+        if missing_cols:
+            needs_refresh = True
+            print(f"Old data missing columns: {missing_cols} — will refresh all repos")
+        for row in df_existing.to_dict("records"):
+            existing_rows[row["full_name"]] = row
+        print(f"Resuming: {len(existing_rows)} repos already fetched")
     else:
-        rows = []
+        needs_refresh = True  # no data at all
 
-    # Fetch repo list (always refetch to get full list)
-    repo_list = fetch_repo_list()
-    print(f"Found {len(repo_list)} repos from search")
+    if needs_refresh or len(existing_rows) < TARGET_REPO_COUNT:
+        repo_list = fetch_repo_list()
+        print(f"Found {len(repo_list)} repos from search")
 
-    # Add repos we haven't seen yet
-    new_count = 0
-    for repo in repo_list:
-        if repo["full_name"] not in existing:
-            rows.append(repo)
-            new_count += 1
-
-    if new_count:
-        print(f"Added {new_count} new repos")
+        # Merge: fresh GraphQL data takes priority, preserve extra columns (e.g. summary)
+        new_rows = {}
+        for r in repo_list:
+            name = r["full_name"]
+            # Carry over extra columns from old data (like 'summary')
+            if name in existing_rows:
+                for col, val in existing_rows[name].items():
+                    if col not in r:
+                        r[col] = val
+            new_rows[name] = r
+        # Keep old rows not in the new fetch
+        for name, row in existing_rows.items():
+            if name not in new_rows:
+                # Backfill missing columns with defaults
+                for col, default in _NEW_COLUMN_DEFAULTS.items():
+                    if col not in row:
+                        row[col] = default
+                new_rows[name] = row
+        rows = list(new_rows.values())
+        print(f"Total repos: {len(rows)} ({len(repo_list)} fresh + {len(rows) - len(repo_list)} retained)")
+    else:
+        rows = list(existing_rows.values())
+        print("All repos already fetched, nothing to do")
 
     df = pd.DataFrame(rows)
     df.to_parquet(REPOS_PARQUET, index=False)

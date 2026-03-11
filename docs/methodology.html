@@ -81,7 +81,6 @@ code { font-size: 14px; background: #f5f5f5; padding: 2px 6px; border-radius: 3p
     <li><a href="#tools">Tools &amp; Technologies</a></li>
     <li><a href="#using-the-visualization">Using the Visualization</a></li>
     <li><a href="#field-definitions">Field Definitions</a></li>
-    <li><a href="#about">About</a></li>
   </ul>
 </nav>
 
@@ -114,8 +113,9 @@ code { font-size: 14px; background: #f5f5f5; padding: 2px 6px; border-radius: 3p
 
 <div class="pipeline-step">
   <strong>1. Fetch repositories</strong>
-  <p><code>01_fetch_repos.py</code> &mdash; Queries the GitHub Search API for the top 1,000
-  most-starred repos and saves metadata plus README content to <code>repos.parquet</code>.</p>
+  <p><code>01_fetch_repos.py</code> &mdash; Queries the GitHub GraphQL API for the top 1,000
+  most-starred repos, fetching metadata and README content in a single query per page,
+  and saves everything to <code>repos.parquet</code>.</p>
 </div>
 
 <div class="pipeline-step">
@@ -162,7 +162,7 @@ code { font-size: 14px; background: #f5f5f5; padding: 2px 6px; border-radius: 3p
     <tr><td><a href="https://github.com/TutteInstitute/datamapplot">DataMapPlot</a></td><td>Interactive HTML map rendering</td></tr>
     <tr><td><a href="https://www.anthropic.com/claude/haiku">Claude Haiku</a></td><td>README summarization</td></tr>
     <tr><td><a href="https://www.anthropic.com/claude/sonnet">Claude Sonnet</a></td><td>Topic label generation</td></tr>
-    <tr><td><a href="https://docs.github.com/en/rest">GitHub API</a></td><td>Repository data and README fetching</td></tr>
+    <tr><td><a href="https://docs.github.com/en/graphql">GitHub GraphQL API</a></td><td>Repository metadata and README fetching</td></tr>
   </tbody>
 </table>
 
@@ -174,7 +174,7 @@ code { font-size: 14px; background: #f5f5f5; padding: 2px 6px; border-radius: 3p
   <li><strong>Click</strong> &mdash; Click any point to open the repository on GitHub in a new tab.</li>
   <li><strong>Search</strong> &mdash; Use the search box to find specific repositories by name.</li>
   <li><strong>Colormaps</strong> &mdash; Switch between colormaps using the dropdown to color points
-  by language, star count, license type, license family, or repo age.</li>
+  by language, star count, license, repo age, owner type, activity recency, fork count, or open issues.</li>
   <li><strong>Topic labels</strong> &mdash; Cluster labels appear on the map at two levels of detail:
   coarse (broad categories) and fine (specific sub-topics).</li>
 </ul>
@@ -190,20 +190,12 @@ code { font-size: 14px; background: #f5f5f5; padding: 2px 6px; border-radius: 3p
     <tr><td>License Type</td><td>The specific license identified by GitHub (e.g., MIT, Apache-2.0, GPL-3.0). Repos without a detected license show as "None".</td></tr>
     <tr><td>License Family</td><td>Licenses grouped into families: MIT, Apache, GPL, BSD, Creative Commons, MPL, Other Permissive, and Unknown/None.</td></tr>
     <tr><td>Repo Age (years)</td><td>Years since the repository was created, calculated from the GitHub creation date.</td></tr>
+    <tr><td>Owner Type</td><td>Whether the repository is owned by an individual User or an Organization account.</td></tr>
+    <tr><td>Last Push (days ago)</td><td>Days since the most recent push to the repository. Green indicates recent activity; red indicates staleness.</td></tr>
+    <tr><td>Fork Count (log10)</td><td>Base-10 logarithm of the repository's fork count. Log scale helps distinguish differences among heavily-forked repos.</td></tr>
+    <tr><td>Open Issues (log10)</td><td>Base-10 logarithm of the repository's open issue count. Log scale normalizes the wide range of issue counts.</td></tr>
   </tbody>
 </table>
-
-<h2 id="about">About</h2>
-<p>
-  GitHub Map was built by <strong>Steven Fazzio</strong>. The source code is available on
-  <a href="https://github.com/stevenfazzio/github-map">GitHub</a> and is released under the
-  <a href="https://github.com/stevenfazzio/github-map/blob/main/LICENSE">MIT License</a>.
-</p>
-<p>
-  Have questions, ideas, or feedback? Feel free to
-  <a href="https://github.com/stevenfazzio/github-map/issues">open an issue</a>
-  on the repository &mdash; I'd love to hear from you.
-</p>
 
 </div>
 
