@@ -29,11 +29,18 @@ def main():
 
     # ── Hover text ───────────────────────────────────────────────────────────
     has_summary = "summary" in df.columns
-    hover_text = [
-        f"{row['full_name']}\n⭐ {row['stargazers_count']:,} | {row['language'] or 'N/A'}"
-        + (f"\n\n{row['summary']}" if has_summary and row.get("summary") else "")
-        for _, row in df.iterrows()
-    ]
+    has_forks = "fork_count" in df.columns
+    hover_text = []
+    for _, row in df.iterrows():
+        line1 = row["full_name"]
+        stars = f"⭐ {row['stargazers_count']:,}"
+        forks = f" | 🍴 {row['fork_count']:,}" if has_forks else ""
+        lang = row["language"] or "N/A"
+        line2 = f"{stars}{forks} | {lang}"
+        text = f"{line1}\n{line2}"
+        if has_summary and row.get("summary"):
+            text += f"\n\n{row['summary']}"
+        hover_text.append(text)
 
     # ── Marker sizes (sqrt of stars) ─────────────────────────────────────────
     marker_sizes = np.sqrt(df["stargazers_count"].values).astype(float)
@@ -94,19 +101,62 @@ def main():
         [(now - pd.to_datetime(d, utc=True).to_pydatetime()).days / 365.25 for d in df["created_at"]]
     )
 
+    # 6–9. New colormaps from GraphQL fields (guarded for backward compat)
+    extra_rawdata = []
+    extra_metadata = []
+
+    if "owner_type" in df.columns:
+        owner_types = df["owner_type"].fillna("Unknown").replace("", "Unknown").values
+        unique_owners = sorted(set(owner_types))
+        owner_palette = glasbey.create_palette(palette_size=len(unique_owners))
+        owner_color_mapping = dict(zip(unique_owners, owner_palette))
+        extra_rawdata.append(owner_types)
+        extra_metadata.append({
+            "field": "owner_type",
+            "description": "Owner Type",
+            "kind": "categorical",
+            "color_mapping": owner_color_mapping,
+        })
+
+    if "pushed_at" in df.columns:
+        days_since_push = np.array([
+            (now - pd.to_datetime(d, utc=True).to_pydatetime()).days
+            if d else 9999
+            for d in df["pushed_at"]
+        ], dtype=float)
+        extra_rawdata.append(days_since_push)
+        extra_metadata.append({
+            "field": "last_push",
+            "description": "Last Push (days ago)",
+            "kind": "continuous",
+            "cmap": "RdYlGn_r",
+        })
+
+    if "fork_count" in df.columns:
+        fork_counts_log = np.log10(df["fork_count"].values.astype(float).clip(min=1))
+        extra_rawdata.append(fork_counts_log)
+        extra_metadata.append({
+            "field": "forks",
+            "description": "Fork Count (log10)",
+            "kind": "continuous",
+            "cmap": "YlGnBu",
+        })
+
+    if "open_issue_count" in df.columns:
+        open_issues_log = np.log10(df["open_issue_count"].values.astype(float).clip(min=1))
+        extra_rawdata.append(open_issues_log)
+        extra_metadata.append({
+            "field": "open_issues",
+            "description": "Open Issues (log10)",
+            "kind": "continuous",
+            "cmap": "OrRd",
+        })
+
     # ── Build the interactive plot ───────────────────────────────────────────
     extra_data = pd.DataFrame({"full_name": df["full_name"].values})
 
-    fig = datamapplot.create_interactive_plot(
-        coords,
-        coarse_labels,
-        fine_labels,
-        hover_text=hover_text,
-        marker_size_array=marker_sizes,
-        extra_point_data=extra_data,
-        on_click="window.open(`https://github.com/{full_name}`, '_blank')",
-        colormap_rawdata=[languages, star_counts, licenses, license_families, repo_ages],
-        colormap_metadata=[
+    all_rawdata = [languages, star_counts, licenses, license_families, repo_ages] + extra_rawdata
+    all_metadata = [
             {
                 "field": "language",
                 "description": "Primary Language",
@@ -137,7 +187,18 @@ def main():
                 "kind": "continuous",
                 "cmap": "viridis_r",
             },
-        ],
+    ] + extra_metadata
+
+    fig = datamapplot.create_interactive_plot(
+        coords,
+        coarse_labels,
+        fine_labels,
+        hover_text=hover_text,
+        marker_size_array=marker_sizes,
+        extra_point_data=extra_data,
+        on_click="window.open(`https://github.com/{full_name}`, '_blank')",
+        colormap_rawdata=all_rawdata,
+        colormap_metadata=all_metadata,
         title="GitHub Map",
         sub_title="Top 1,000 most-starred repositories, mapped by README similarity",
         enable_search=True,
@@ -346,8 +407,9 @@ code { font-size: 14px; background: #f5f5f5; padding: 2px 6px; border-radius: 3p
 
 <div class="pipeline-step">
   <strong>1. Fetch repositories</strong>
-  <p><code>01_fetch_repos.py</code> &mdash; Queries the GitHub Search API for the top 1,000
-  most-starred repos and saves metadata plus README content to <code>repos.parquet</code>.</p>
+  <p><code>01_fetch_repos.py</code> &mdash; Queries the GitHub GraphQL API for the top 1,000
+  most-starred repos, fetching metadata and README content in a single query per page,
+  and saves everything to <code>repos.parquet</code>.</p>
 </div>
 
 <div class="pipeline-step">
@@ -394,7 +456,7 @@ code { font-size: 14px; background: #f5f5f5; padding: 2px 6px; border-radius: 3p
     <tr><td><a href="https://github.com/TutteInstitute/datamapplot">DataMapPlot</a></td><td>Interactive HTML map rendering</td></tr>
     <tr><td><a href="https://www.anthropic.com/claude/haiku">Claude Haiku</a></td><td>README summarization</td></tr>
     <tr><td><a href="https://www.anthropic.com/claude/sonnet">Claude Sonnet</a></td><td>Topic label generation</td></tr>
-    <tr><td><a href="https://docs.github.com/en/rest">GitHub API</a></td><td>Repository data and README fetching</td></tr>
+    <tr><td><a href="https://docs.github.com/en/graphql">GitHub GraphQL API</a></td><td>Repository metadata and README fetching</td></tr>
   </tbody>
 </table>
 
@@ -406,7 +468,7 @@ code { font-size: 14px; background: #f5f5f5; padding: 2px 6px; border-radius: 3p
   <li><strong>Click</strong> &mdash; Click any point to open the repository on GitHub in a new tab.</li>
   <li><strong>Search</strong> &mdash; Use the search box to find specific repositories by name.</li>
   <li><strong>Colormaps</strong> &mdash; Switch between colormaps using the dropdown to color points
-  by language, star count, license type, license family, or repo age.</li>
+  by language, star count, license, repo age, owner type, activity recency, fork count, or open issues.</li>
   <li><strong>Topic labels</strong> &mdash; Cluster labels appear on the map at two levels of detail:
   coarse (broad categories) and fine (specific sub-topics).</li>
 </ul>
@@ -422,6 +484,10 @@ code { font-size: 14px; background: #f5f5f5; padding: 2px 6px; border-radius: 3p
     <tr><td>License Type</td><td>The specific license identified by GitHub (e.g., MIT, Apache-2.0, GPL-3.0). Repos without a detected license show as "None".</td></tr>
     <tr><td>License Family</td><td>Licenses grouped into families: MIT, Apache, GPL, BSD, Creative Commons, MPL, Other Permissive, and Unknown/None.</td></tr>
     <tr><td>Repo Age (years)</td><td>Years since the repository was created, calculated from the GitHub creation date.</td></tr>
+    <tr><td>Owner Type</td><td>Whether the repository is owned by an individual User or an Organization account.</td></tr>
+    <tr><td>Last Push (days ago)</td><td>Days since the most recent push to the repository. Green indicates recent activity; red indicates staleness.</td></tr>
+    <tr><td>Fork Count (log10)</td><td>Base-10 logarithm of the repository's fork count. Log scale helps distinguish differences among heavily-forked repos.</td></tr>
+    <tr><td>Open Issues (log10)</td><td>Base-10 logarithm of the repository's open issue count. Log scale normalizes the wide range of issue counts.</td></tr>
   </tbody>
 </table>
 

@@ -1,6 +1,6 @@
-"""Fetch top 1K GitHub repos by stars and their READMEs."""
+"""Fetch top 1K GitHub repos by stars via GraphQL (metadata + README in one query)."""
 
-import base64
+import json
 import time
 
 import pandas as pd
@@ -9,106 +9,225 @@ from tqdm import tqdm
 
 from config import GITHUB_TOKEN, REPOS_PARQUET, TARGET_REPO_COUNT
 
+GRAPHQL_URL = "https://api.github.com/graphql"
 HEADERS = {
-    "Accept": "application/vnd.github+json",
     "Authorization": f"Bearer {GITHUB_TOKEN}",
+    "Content-Type": "application/json",
 }
-SEARCH_URL = "https://api.github.com/search/repositories"
 PER_PAGE = 100
-# GitHub search caps at 1,000 results per query, so we stay within 9 pages
-# and use star-count ranges to paginate beyond that limit.
-MAX_PAGES_PER_QUERY = 9
 
-
-def _parse_item(item: dict) -> dict:
-    return {
-        "full_name": item["full_name"],
-        "description": item.get("description") or "",
-        "language": item.get("language") or "",
-        "stargazers_count": item["stargazers_count"],
-        "license": (item.get("license") or {}).get("spdx_id", ""),
-        "created_at": item["created_at"],
-        "topics": ",".join(item.get("topics", [])),
+QUERY = """
+query ($queryString: String!, $cursor: String) {
+  search(query: $queryString, type: REPOSITORY, first: 100, after: $cursor) {
+    pageInfo { hasNextPage endCursor }
+    edges {
+      node {
+        ... on Repository {
+          nameWithOwner
+          description
+          primaryLanguage { name }
+          stargazerCount
+          licenseInfo { spdxId }
+          createdAt
+          repositoryTopics(first: 20) { nodes { topic { name } } }
+          pushedAt
+          forkCount
+          isArchived
+          diskUsage
+          hasWikiEnabled
+          hasDiscussionsEnabled
+          watchers { totalCount }
+          issues(states: OPEN) { totalCount }
+          pullRequests(states: OPEN) { totalCount }
+          releases { totalCount }
+          discussions { totalCount }
+          fundingLinks { platform url }
+          defaultBranchRef {
+            name
+            target { ... on Commit { history { totalCount } } }
+          }
+          owner { __typename }
+          languages(first: 10, orderBy: {field: SIZE, direction: DESC}) {
+            edges { size node { name } }
+          }
+          readme_md: object(expression: "HEAD:README.md") { ... on Blob { text } }
+          readme_lower: object(expression: "HEAD:readme.md") { ... on Blob { text } }
+          readme_rst: object(expression: "HEAD:README.rst") { ... on Blob { text } }
+          readme_txt: object(expression: "HEAD:README.txt") { ... on Blob { text } }
+          readme_noext: object(expression: "HEAD:README") { ... on Blob { text } }
+        }
+      }
     }
+  }
+}
+"""
 
 
-def _search_with_retry(params: dict, max_retries: int = 5) -> requests.Response:
-    """Make a search request with exponential backoff on rate limits."""
+def _graphql_query(query: str, variables: dict, max_retries: int = 5) -> dict:
+    """Execute a GraphQL query with rate-limit-aware retry."""
     for attempt in range(max_retries):
-        resp = requests.get(SEARCH_URL, headers=HEADERS, params=params, timeout=30)
+        resp = requests.post(
+            GRAPHQL_URL,
+            headers=HEADERS,
+            json={"query": query, "variables": variables},
+            timeout=60,
+        )
+        # Check rate limit budget proactively
+        remaining = int(resp.headers.get("X-RateLimit-Remaining", 5000))
+        if remaining < 500:
+            reset_at = int(resp.headers.get("X-RateLimit-Reset", 0))
+            wait = max(reset_at - int(time.time()), 10)
+            print(f"\n  Rate limit low ({remaining} remaining), waiting {wait}s...")
+            time.sleep(wait)
+
         if resp.status_code == 200:
-            return resp
-        if resp.status_code in (403, 429):
-            wait = 2 ** (attempt + 2)  # 4, 8, 16, 32, 64 seconds
+            body = resp.json()
+            if "errors" in body:
+                # Some GraphQL errors are transient
+                err_msg = body["errors"][0].get("message", "")
+                if "rate limit" in err_msg.lower() or "timeout" in err_msg.lower():
+                    wait = 2 ** (attempt + 2)
+                    print(f"\n  GraphQL error: {err_msg}, retrying in {wait}s...")
+                    time.sleep(wait)
+                    continue
+                # Non-transient errors: print but return what we have
+                print(f"\n  GraphQL error: {err_msg}")
+            return body
+        if resp.status_code in (403, 429, 502, 503):
+            wait = 2 ** (attempt + 2)
             retry_after = resp.headers.get("Retry-After")
             if retry_after:
                 wait = max(wait, int(retry_after) + 1)
-            print(f"\n  Rate limited, waiting {wait}s (attempt {attempt + 1})...")
+            print(f"\n  HTTP {resp.status_code}, waiting {wait}s (attempt {attempt + 1})...")
             time.sleep(wait)
         else:
             resp.raise_for_status()
     resp.raise_for_status()
-    return resp  # unreachable, but satisfies type checker
+    return {}  # unreachable
+
+
+def _extract_readme(node: dict) -> str:
+    """Extract README text from GraphQL aliases, taking the first non-null."""
+    for key in ("readme_md", "readme_lower", "readme_rst", "readme_txt", "readme_noext"):
+        obj = node.get(key)
+        if obj and obj.get("text"):
+            return obj["text"]
+    return ""
+
+
+def _parse_node(node: dict) -> dict:
+    """Parse a GraphQL Repository node into a flat row dict."""
+    # Core fields (backward-compatible with REST version)
+    topics_list = [
+        t["topic"]["name"]
+        for t in (node.get("repositoryTopics") or {}).get("nodes", [])
+    ]
+    default_branch_ref = node.get("defaultBranchRef") or {}
+    target = default_branch_ref.get("target") or {}
+    history = target.get("history") or {}
+    languages_edges = (node.get("languages") or {}).get("edges", [])
+    languages_json = json.dumps(
+        [{"name": e["node"]["name"], "bytes": e["size"]} for e in languages_edges]
+    )
+
+    return {
+        # Existing columns
+        "full_name": node["nameWithOwner"],
+        "description": node.get("description") or "",
+        "language": (node.get("primaryLanguage") or {}).get("name", ""),
+        "stargazers_count": node["stargazerCount"],
+        "license": (node.get("licenseInfo") or {}).get("spdxId", ""),
+        "created_at": node.get("createdAt", ""),
+        "topics": ",".join(topics_list),
+        "readme": _extract_readme(node),
+        # New columns
+        "pushed_at": node.get("pushedAt") or "",
+        "fork_count": node.get("forkCount", 0),
+        "is_archived": node.get("isArchived", False),
+        "disk_usage_kb": node.get("diskUsage", 0),
+        "has_wiki": node.get("hasWikiEnabled", False),
+        "has_discussions": node.get("hasDiscussionsEnabled", False),
+        "watcher_count": (node.get("watchers") or {}).get("totalCount", 0),
+        "open_issue_count": (node.get("issues") or {}).get("totalCount", 0),
+        "open_pr_count": (node.get("pullRequests") or {}).get("totalCount", 0),
+        "release_count": (node.get("releases") or {}).get("totalCount", 0),
+        "discussion_count": (node.get("discussions") or {}).get("totalCount", 0),
+        "has_funding": len(node.get("fundingLinks") or []) > 0,
+        "default_branch": default_branch_ref.get("name", ""),
+        "commit_count": history.get("totalCount", 0),
+        "owner_type": (node.get("owner") or {}).get("__typename", ""),
+        "languages_json": languages_json,
+    }
 
 
 def fetch_repo_list() -> list[dict]:
-    """Fetch top repos by star count, using star-range pagination."""
+    """Fetch top repos by star count using GraphQL with star-range pagination."""
     repos = []
     seen = set()
-    star_ceiling = None  # no upper bound for the first query
+    star_ceiling = None
 
-    with tqdm(total=TARGET_REPO_COUNT, desc="Searching repos") as pbar:
+    with tqdm(total=TARGET_REPO_COUNT, desc="Fetching repos") as pbar:
         while len(repos) < TARGET_REPO_COUNT:
             q = f"stars:<={star_ceiling}" if star_ceiling else "stars:>=1"
+            q += " sort:stars-desc"
+            cursor = None
 
-            for page in range(1, MAX_PAGES_PER_QUERY + 1):
-                resp = _search_with_retry(
-                    {
-                        "q": q,
-                        "sort": "stars",
-                        "order": "desc",
-                        "per_page": PER_PAGE,
-                        "page": page,
-                    }
-                )
-                items = resp.json()["items"]
-                if not items:
+            while len(repos) < TARGET_REPO_COUNT:
+                variables = {"queryString": q, "cursor": cursor}
+                result = _graphql_query(QUERY, variables)
+
+                search = result.get("data", {}).get("search", {})
+                edges = search.get("edges", [])
+                if not edges:
                     break
 
-                for item in items:
-                    name = item["full_name"]
+                for edge in edges:
+                    node = edge.get("node")
+                    if not node or "nameWithOwner" not in node:
+                        continue
+                    name = node["nameWithOwner"]
                     if name not in seen:
                         seen.add(name)
-                        repos.append(_parse_item(item))
+                        repos.append(_parse_node(node))
                         pbar.update(1)
                         if len(repos) >= TARGET_REPO_COUNT:
                             break
 
-                if len(repos) >= TARGET_REPO_COUNT:
+                page_info = search.get("pageInfo", {})
+                if not page_info.get("hasNextPage") or len(repos) >= TARGET_REPO_COUNT:
                     break
-                time.sleep(3)
+                cursor = page_info["endCursor"]
+                time.sleep(1)
 
-            if not items or len(repos) >= TARGET_REPO_COUNT:
+            if not edges or len(repos) >= TARGET_REPO_COUNT:
                 break
 
-            # Next query: stars at or below the last repo's count
+            # Next star range: at or below the last repo's count
             star_ceiling = repos[-1]["stargazers_count"]
-            time.sleep(3)
+            time.sleep(1)
 
     return repos[:TARGET_REPO_COUNT]
 
 
-def fetch_readme(full_name: str) -> str:
-    """Fetch and decode a repo's README."""
-    url = f"https://api.github.com/repos/{full_name}/readme"
-    resp = requests.get(url, headers=HEADERS, timeout=30)
-    if resp.status_code != 200:
-        return ""
-    content = resp.json().get("content", "")
-    try:
-        return base64.b64decode(content).decode("utf-8", errors="replace")
-    except Exception:
-        return ""
+# Default values for new columns (used when backfilling old parquet files)
+_NEW_COLUMN_DEFAULTS = {
+    "pushed_at": "",
+    "fork_count": 0,
+    "is_archived": False,
+    "disk_usage_kb": 0,
+    "has_wiki": False,
+    "has_discussions": False,
+    "watcher_count": 0,
+    "open_issue_count": 0,
+    "open_pr_count": 0,
+    "release_count": 0,
+    "discussion_count": 0,
+    "has_funding": False,
+    "default_branch": "",
+    "commit_count": 0,
+    "owner_type": "",
+    "languages_json": "[]",
+}
 
 
 def main():
@@ -116,6 +235,10 @@ def main():
     existing = set()
     if REPOS_PARQUET.exists():
         df_existing = pd.read_parquet(REPOS_PARQUET)
+        # Backfill missing new columns with defaults
+        for col, default in _NEW_COLUMN_DEFAULTS.items():
+            if col not in df_existing.columns:
+                df_existing[col] = default
         existing = set(df_existing["full_name"])
         rows = df_existing.to_dict("records")
         print(f"Resuming: {len(rows)} repos already fetched")
@@ -126,20 +249,15 @@ def main():
     repo_list = fetch_repo_list()
     print(f"Found {len(repo_list)} repos from search")
 
-    # Fetch READMEs for repos we haven't processed yet
-    pending = [r for r in repo_list if r["full_name"] not in existing]
-    print(f"Fetching READMEs for {len(pending)} new repos")
+    # Add repos we haven't seen yet
+    new_count = 0
+    for repo in repo_list:
+        if repo["full_name"] not in existing:
+            rows.append(repo)
+            new_count += 1
 
-    for i, repo in enumerate(tqdm(pending, desc="Fetching READMEs")):
-        repo["readme"] = fetch_readme(repo["full_name"])
-        rows.append(repo)
-
-        # Save progress every 100 repos
-        if (i + 1) % 100 == 0:
-            pd.DataFrame(rows).to_parquet(REPOS_PARQUET, index=False)
-            print(f"  Saved checkpoint ({len(rows)} repos)")
-
-        time.sleep(0.8)  # ~1 req/sec
+    if new_count:
+        print(f"Added {new_count} new repos")
 
     df = pd.DataFrame(rows)
     df.to_parquet(REPOS_PARQUET, index=False)
