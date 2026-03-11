@@ -7,10 +7,10 @@ and produces comparison outputs.
 
 import asyncio
 import copy
+import itertools
 
 import numpy as np
 import pandas as pd
-from sentence_transformers import SentenceTransformer
 from toponymy import Toponymy, ToponymyClusterer
 from toponymy.audit import (
     create_comparison_df,
@@ -39,12 +39,18 @@ from config import (
 
 EXPERIMENTS = [
     {
-        "name": "minilm_v2",
-        "embedder": SentenceTransformer("all-MiniLM-L6-v2"),
+        "name": "detail_default",
+        # Baseline: inherits DEFAULTS (0.0, 1.0)
     },
     {
-        "name": "cohere_v4",
-        "embedder": CohereEmbedder(api_key=CO_API_KEY, model="embed-v4.0"),
+        "name": "detail_medium",
+        "lowest_detail_level": 0.3,
+        "highest_detail_level": 0.8,
+    },
+    {
+        "name": "detail_concise",
+        "lowest_detail_level": 0.5,
+        "highest_detail_level": 1.0,
     },
 ]
 
@@ -55,6 +61,8 @@ DEFAULTS = {
     "object_description": "GitHub repository descriptions",
     "corpus_description": "collection of the top 1,000 most-starred GitHub repositories",
     "exemplar_delimiters": ['    * """', '"""\n'],
+    "lowest_detail_level": 0.0,
+    "highest_detail_level": 1.0,
 }
 
 
@@ -126,6 +134,8 @@ def run_experiments(df, embeddings, coords, documents):
             object_description=cfg["object_description"],
             corpus_description=cfg["corpus_description"],
             exemplar_delimiters=cfg["exemplar_delimiters"],
+            lowest_detail_level=cfg["lowest_detail_level"],
+            highest_detail_level=cfg["highest_detail_level"],
         )
         topic_model.fit(
             objects=documents,
@@ -240,24 +250,25 @@ def compare_experiments(models, documents):
             topic_cols = [f"topic_{n}" for n in names]
             print(f"\n── {label} layer comparison ──")
 
-            # Topic name agreement
-            agree = (merged[topic_cols[0]] == merged[topic_cols[1]]).mean()
-            print(f"  Topic name agreement: {agree:.1%}")
-
             # Unique topic counts and avg name length
             for col in topic_cols:
                 n_unique = merged[col].nunique()
                 avg_len = merged[col].astype(str).str.len().mean()
                 print(f"  Unique topics ({col}): {n_unique}, avg name length: {avg_len:.1f} chars")
 
-            # Show divergent clusters
-            diff_mask = merged[topic_cols[0]] != merged[topic_cols[1]]
-            diff_rows = merged[diff_mask].head(5)
-            if not diff_rows.empty:
-                print(f"  Example divergent clusters ({label}):")
-                for _, row in diff_rows.iterrows():
-                    print(f"    Cluster {row['Cluster ID']}: "
-                          f"{row[topic_cols[0]]!r} vs {row[topic_cols[1]]!r}")
+            # Pairwise comparisons
+            for name_a, name_b in itertools.combinations(names, 2):
+                col_a, col_b = f"topic_{name_a}", f"topic_{name_b}"
+                agree = (merged[col_a] == merged[col_b]).mean()
+                print(f"  Topic name agreement ({name_a} vs {name_b}): {agree:.1%}")
+
+                diff_mask = merged[col_a] != merged[col_b]
+                diff_rows = merged[diff_mask].head(5)
+                if not diff_rows.empty:
+                    print(f"  Example divergent clusters ({name_a} vs {name_b}):")
+                    for _, row in diff_rows.iterrows():
+                        print(f"    Cluster {row['Cluster ID']}: "
+                              f"{row[col_a]!r} vs {row[col_b]!r}")
 
         # Keyphrase overlap (Jaccard) for coarse layer
         print(f"\n── Keyphrase overlap (coarse, Jaccard) ──")
@@ -266,18 +277,19 @@ def compare_experiments(models, documents):
             kp = create_comparison_df(model, layer_index=0)
             kp_dfs[name] = kp.set_index("Cluster ID")["Extracted Keyphrases (Top 5)"]
 
-        common_ids = kp_dfs[names[0]].index.intersection(kp_dfs[names[1]].index)
-        jaccard_scores = []
-        for cid in common_ids:
-            set_a = set(str(kp_dfs[names[0]].get(cid, "")).split(", "))
-            set_b = set(str(kp_dfs[names[1]].get(cid, "")).split(", "))
-            if set_a or set_b:
-                jaccard = len(set_a & set_b) / len(set_a | set_b) if (set_a | set_b) else 0
-                jaccard_scores.append(jaccard)
+        for name_a, name_b in itertools.combinations(names, 2):
+            common_ids = kp_dfs[name_a].index.intersection(kp_dfs[name_b].index)
+            jaccard_scores = []
+            for cid in common_ids:
+                set_a = set(str(kp_dfs[name_a].get(cid, "")).split(", "))
+                set_b = set(str(kp_dfs[name_b].get(cid, "")).split(", "))
+                if set_a or set_b:
+                    jaccard = len(set_a & set_b) / len(set_a | set_b) if (set_a | set_b) else 0
+                    jaccard_scores.append(jaccard)
 
-        if jaccard_scores:
-            mean_jaccard = np.mean(jaccard_scores)
-            print(f"  Mean Jaccard similarity: {mean_jaccard:.3f}")
+            if jaccard_scores:
+                mean_jaccard = np.mean(jaccard_scores)
+                print(f"  Mean Jaccard similarity ({name_a} vs {name_b}): {mean_jaccard:.3f}")
 
     print(f"\nSaved comparison to {EXPERIMENTS_DIR / 'comparison.xlsx'}")
 
