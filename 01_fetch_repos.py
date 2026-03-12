@@ -1,15 +1,19 @@
 """Fetch repo metadata + READMEs via batched GraphQL direct lookups.
 
+Two-pass approach for speed:
+  1. Metadata-only pass: fetch all ~25K candidates with large batches (no README blobs).
+  2. README pass: fetch READMEs only for the top TARGET_REPO_COUNT repos by stars.
+
 Reads candidate repo names from data/candidates.csv (produced by
-00_enumerate_repos.py or copied from committed fallback), looks up each
-via repository(owner:, name:) queries, and keeps the top TARGET_REPO_COUNT
-by stargazer count.
+00_enumerate_repos.py or copied from committed fallback).
 """
 
 import csv
 import json
 import shutil
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
 import requests
@@ -24,14 +28,18 @@ from config import (
     TARGET_REPO_COUNT,
 )
 
+CONCURRENT_REQUESTS = 5
+METADATA_BATCH_SIZE = 150  # No README blobs → much larger batches
+CHECKPOINT_EVERY = 50  # batches between checkpoints
+
 GRAPHQL_URL = "https://api.github.com/graphql"
 HEADERS = {
     "Authorization": f"Bearer {GITHUB_TOKEN}",
     "Content-Type": "application/json",
 }
 
-REPO_FIELDS_FRAGMENT = """
-fragment RepoFields on Repository {
+METADATA_FRAGMENT = """
+fragment MetadataFields on Repository {
   nameWithOwner
   description
   primaryLanguage { name }
@@ -59,12 +67,16 @@ fragment RepoFields on Repository {
   languages(first: 10, orderBy: {field: SIZE, direction: DESC}) {
     edges { size node { name } }
   }
+}
+"""
+
+README_FRAGMENT = """
+fragment ReadmeFields on Repository {
+  nameWithOwner
   readme_md: object(expression: "HEAD:README.md") { ... on Blob { text } }
   readme_lower: object(expression: "HEAD:readme.md") { ... on Blob { text } }
 }
 """
-
-CHECKPOINT_EVERY = 50  # batches between checkpoints
 
 
 def _graphql_query(query: str, variables: dict | None = None, max_retries: int = 5) -> dict:
@@ -125,8 +137,8 @@ def _extract_readme(node: dict) -> str:
     return ""
 
 
-def _parse_node(node: dict) -> dict:
-    """Parse a GraphQL Repository node into a flat row dict."""
+def _parse_metadata(node: dict) -> dict:
+    """Parse a GraphQL Repository node into a flat row dict (no README)."""
     topics_list = [
         t["topic"]["name"]
         for t in (node.get("repositoryTopics") or {}).get("nodes", [])
@@ -147,7 +159,6 @@ def _parse_node(node: dict) -> dict:
         "license": (node.get("licenseInfo") or {}).get("spdxId", ""),
         "created_at": node.get("createdAt", ""),
         "topics": ",".join(topics_list),
-        "readme": _extract_readme(node),
         "pushed_at": node.get("pushedAt") or "",
         "fork_count": node.get("forkCount", 0),
         "is_archived": node.get("isArchived", False),
@@ -191,32 +202,36 @@ def _load_candidates() -> list[str]:
     return candidates
 
 
-def _build_batch_query(repos: list[str]) -> str:
+def _build_batch_query(repos: list[str], fragment: str) -> str:
     """Build a batched GraphQL query with aliased repository() lookups."""
+    # Determine fragment name from content
+    if "MetadataFields" in fragment:
+        spread = "MetadataFields"
+    else:
+        spread = "ReadmeFields"
+
     parts = []
     for i, full_name in enumerate(repos):
         owner, name = full_name.split("/", 1)
-        # Escape quotes in owner/name (shouldn't happen, but be safe)
         owner = owner.replace('"', '\\"')
         name = name.replace('"', '\\"')
-        parts.append(f'  repo{i}: repository(owner: "{owner}", name: "{name}") {{ ...RepoFields }}')
+        parts.append(f'  repo{i}: repository(owner: "{owner}", name: "{name}") {{ ...{spread} }}')
     query_body = "\n".join(parts)
-    return f"query {{\n{query_body}\n}}\n{REPO_FIELDS_FRAGMENT}"
+    return f"query {{\n{query_body}\n}}\n{fragment}"
 
 
-def _fetch_batch(repos: list[str], batch_size: int) -> list[dict]:
-    """Fetch a batch, falling back to smaller batches on 502."""
-    query = _build_batch_query(repos)
+def _fetch_metadata_batch(repos: list[str]) -> list[dict]:
+    """Fetch metadata for a batch (no READMEs), splitting on failure."""
+    query = _build_batch_query(repos, METADATA_FRAGMENT)
     try:
         result = _graphql_query(query)
     except RuntimeError:
-        if batch_size <= 5:
+        if len(repos) <= 5:
             raise
-        # Fall back to smaller batches
         half = len(repos) // 2
-        print(f"\n  Batch failed, splitting into two sub-batches of {half}")
-        left = _fetch_batch(repos[:half], half)
-        right = _fetch_batch(repos[half:], len(repos) - half)
+        print(f"\n  Metadata batch failed, splitting into two sub-batches of {half}")
+        left = _fetch_metadata_batch(repos[:half])
+        right = _fetch_metadata_batch(repos[half:])
         return left + right
 
     data = result.get("data") or {}
@@ -224,19 +239,72 @@ def _fetch_batch(repos: list[str], batch_size: int) -> list[dict]:
     for i in range(len(repos)):
         node = data.get(f"repo{i}")
         if node is None:
-            # Deleted/renamed/private repo — skip silently
             continue
         try:
-            rows.append(_parse_node(node))
+            rows.append(_parse_metadata(node))
         except (KeyError, TypeError) as e:
             print(f"\n  Skipping {repos[i]}: parse error: {e}")
     return rows
 
 
+def _fetch_readme_batch(repos: list[str]) -> dict[str, str]:
+    """Fetch READMEs for a batch, returning {full_name: readme_text}."""
+    query = _build_batch_query(repos, README_FRAGMENT)
+    try:
+        result = _graphql_query(query)
+    except RuntimeError:
+        if len(repos) <= 5:
+            raise
+        half = len(repos) // 2
+        print(f"\n  README batch failed, splitting into two sub-batches of {half}")
+        left = _fetch_readme_batch(repos[:half])
+        right = _fetch_readme_batch(repos[half:])
+        left.update(right)
+        return left
+
+    data = result.get("data") or {}
+    readmes = {}
+    for i in range(len(repos)):
+        node = data.get(f"repo{i}")
+        if node is None:
+            continue
+        readmes[node["nameWithOwner"]] = _extract_readme(node)
+    return readmes
+
+
+def _fetch_concurrent(items, batch_size, fetch_fn, desc, combine_fn):
+    """Generic concurrent batch fetcher with checkpointing."""
+    batches = []
+    for i in range(0, len(items), batch_size):
+        batches.append(items[i : i + batch_size])
+
+    results = []
+    lock = threading.Lock()
+
+    with tqdm(total=len(items), desc=desc) as pbar:
+        with ThreadPoolExecutor(max_workers=CONCURRENT_REQUESTS) as executor:
+            futures = {
+                executor.submit(fetch_fn, batch): batch
+                for batch in batches
+            }
+            for future in as_completed(futures):
+                batch = futures[future]
+                try:
+                    result = future.result()
+                except Exception as e:
+                    print(f"\n  Batch failed permanently: {e}")
+                    result = combine_fn()  # empty result
+                with lock:
+                    results.append(result)
+                    pbar.update(len(batch))
+
+    return results
+
+
 def main():
     candidates = _load_candidates()
 
-    # Resume: load existing progress and skip already-fetched repos
+    # Resume: load existing progress
     existing_rows = {}
     if REPOS_PARQUET.exists():
         df_existing = pd.read_parquet(REPOS_PARQUET)
@@ -244,68 +312,70 @@ def main():
             existing_rows[row["full_name"]] = row
         print(f"Resuming: {len(existing_rows)} repos already fetched")
 
-    # Filter candidates to only those not yet fetched
-    to_fetch = [c for c in candidates if c not in existing_rows]
-    print(f"Need to fetch {len(to_fetch)} remaining candidates")
+    # --- Pass 1: Metadata (no READMEs) for all candidates ---
+    # Skip candidates we already have metadata for
+    need_metadata = [c for c in candidates if c not in existing_rows]
+    print(f"Pass 1 — metadata: {len(need_metadata)} candidates to fetch")
 
-    if to_fetch:
-        new_rows = []
-        batches_since_checkpoint = 0
+    if need_metadata:
+        batch_results = _fetch_concurrent(
+            need_metadata, METADATA_BATCH_SIZE, _fetch_metadata_batch,
+            "Fetching metadata", list,
+        )
+        for batch_rows in batch_results:
+            for r in batch_rows:
+                name = r["full_name"]
+                if name in existing_rows:
+                    for col, val in existing_rows[name].items():
+                        if col not in r:
+                            r[col] = val
+                existing_rows[name] = r
 
-        with tqdm(total=len(to_fetch), desc="Fetching repos") as pbar:
-            for batch_start in range(0, len(to_fetch), GRAPHQL_BATCH_SIZE):
-                batch = to_fetch[batch_start : batch_start + GRAPHQL_BATCH_SIZE]
-                rows = _fetch_batch(batch, len(batch))
-                new_rows.extend(rows)
-                pbar.update(len(batch))
-                batches_since_checkpoint += 1
+        # Checkpoint after pass 1
+        df = pd.DataFrame(list(existing_rows.values()))
+        df.to_parquet(REPOS_PARQUET, index=False)
+        print(f"Pass 1 complete: {len(existing_rows)} total repos saved")
 
-                # Checkpoint periodically
-                if batches_since_checkpoint >= CHECKPOINT_EVERY:
-                    _save_checkpoint(existing_rows, new_rows)
-                    batches_since_checkpoint = 0
-
-                # Brief pause to stay well within rate limits
-                time.sleep(0.5)
-
-        # Merge new rows into existing
-        for r in new_rows:
-            name = r["full_name"]
-            # Carry over extra columns from old data (like 'summary')
-            if name in existing_rows:
-                for col, val in existing_rows[name].items():
-                    if col not in r:
-                        r[col] = val
-            existing_rows[name] = r
-
-        print(f"Fetched {len(new_rows)} new repos ({len(new_rows) - len([r for r in new_rows])} errors)")
-
-    # Sort by stars descending and keep top TARGET_REPO_COUNT
-    all_rows = sorted(existing_rows.values(), key=lambda r: r.get("stargazers_count", 0), reverse=True)
-    rows = all_rows[:TARGET_REPO_COUNT]
+    # --- Sort and keep top N ---
+    all_rows = sorted(
+        existing_rows.values(),
+        key=lambda r: r.get("stargazers_count", 0),
+        reverse=True,
+    )
+    top_rows = all_rows[:TARGET_REPO_COUNT]
+    top_names = {r["full_name"] for r in top_rows}
     if len(all_rows) > TARGET_REPO_COUNT:
-        min_stars = rows[-1].get("stargazers_count", 0)
-        print(f"Keeping top {TARGET_REPO_COUNT} repos (min stars: {min_stars})")
+        min_stars = top_rows[-1].get("stargazers_count", 0)
+        print(f"Top {TARGET_REPO_COUNT} repos selected (min stars: {min_stars})")
 
-    df = pd.DataFrame(rows)
+    # --- Pass 2: READMEs for top repos only ---
+    need_readme = [r["full_name"] for r in top_rows if not r.get("readme")]
+    print(f"Pass 2 — READMEs: {len(need_readme)} repos need READMEs")
+
+    if need_readme:
+        batch_results = _fetch_concurrent(
+            need_readme, GRAPHQL_BATCH_SIZE, _fetch_readme_batch,
+            "Fetching READMEs", dict,
+        )
+        for readme_map in batch_results:
+            for name, text in readme_map.items():
+                if name in existing_rows:
+                    existing_rows[name]["readme"] = text
+
+    # --- Final save: top N only ---
+    final_rows = sorted(
+        (existing_rows[n] for n in top_names if n in existing_rows),
+        key=lambda r: r.get("stargazers_count", 0),
+        reverse=True,
+    )
+    # Ensure all rows have a readme column
+    for r in final_rows:
+        r.setdefault("readme", "")
+
+    df = pd.DataFrame(final_rows)
     df.to_parquet(REPOS_PARQUET, index=False)
     print(f"Done. Saved {len(df)} repos to {REPOS_PARQUET}")
     print(f"  Non-empty READMEs: {(df['readme'].str.len() > 0).sum()}")
-
-
-def _save_checkpoint(existing_rows: dict, new_rows: list[dict]):
-    """Save intermediate progress to parquet."""
-    merged = dict(existing_rows)
-    for r in new_rows:
-        name = r["full_name"]
-        if name in merged:
-            for col, val in merged[name].items():
-                if col not in r:
-                    r[col] = val
-        merged[name] = r
-    df = pd.DataFrame(list(merged.values()))
-    df.to_parquet(REPOS_PARQUET, index=False)
-    print(f"\n  Checkpoint: saved {len(df)} repos")
 
 
 if __name__ == "__main__":

@@ -38,7 +38,7 @@ GCP_PROJECT = os.environ.get("GCP_PROJECT", "")
 
 # ── Constants ────────────────────────────────────────────────────────────────
 TARGET_REPO_COUNT = 10_000
-GRAPHQL_BATCH_SIZE = 25
+GRAPHQL_BATCH_SIZE = 50
 COHERE_BATCH_SIZE = 96
 COHERE_EMBED_DIMENSION = 512
 ANTHROPIC_MODEL_SUMMARIZE = "claude-haiku-4-5"
