@@ -63,44 +63,48 @@ query ($queryString: String!, $cursor: String) {
 def _graphql_query(query: str, variables: dict, max_retries: int = 5) -> dict:
     """Execute a GraphQL query with rate-limit-aware retry."""
     for attempt in range(max_retries):
-        resp = requests.post(
-            GRAPHQL_URL,
-            headers=HEADERS,
-            json={"query": query, "variables": variables},
-            timeout=60,
-        )
-        # Check rate limit budget proactively
-        remaining = int(resp.headers.get("X-RateLimit-Remaining", 5000))
-        if remaining < 500:
-            reset_at = int(resp.headers.get("X-RateLimit-Reset", 0))
-            wait = max(reset_at - int(time.time()), 10)
-            print(f"\n  Rate limit low ({remaining} remaining), waiting {wait}s...")
-            time.sleep(wait)
+        try:
+            resp = requests.post(
+                GRAPHQL_URL,
+                headers=HEADERS,
+                json={"query": query, "variables": variables},
+                timeout=60,
+            )
+            # Check rate limit budget proactively
+            remaining = int(resp.headers.get("X-RateLimit-Remaining", 5000))
+            if remaining < 500:
+                reset_at = int(resp.headers.get("X-RateLimit-Reset", 0))
+                wait = max(reset_at - int(time.time()), 10)
+                print(f"\n  Rate limit low ({remaining} remaining), waiting {wait}s...")
+                time.sleep(wait)
 
-        if resp.status_code == 200:
-            body = resp.json()
-            if "errors" in body:
-                # Some GraphQL errors are transient
-                err_msg = body["errors"][0].get("message", "")
-                if "rate limit" in err_msg.lower() or "timeout" in err_msg.lower():
-                    wait = 2 ** (attempt + 2)
-                    print(f"\n  GraphQL error: {err_msg}, retrying in {wait}s...")
-                    time.sleep(wait)
-                    continue
-                # Non-transient errors: print but return what we have
-                print(f"\n  GraphQL error: {err_msg}")
-            return body
-        if resp.status_code in (403, 429, 502, 503):
+            if resp.status_code == 200:
+                body = resp.json()
+                if "errors" in body:
+                    # Some GraphQL errors are transient
+                    err_msg = body["errors"][0].get("message", "")
+                    if "rate limit" in err_msg.lower() or "timeout" in err_msg.lower():
+                        wait = 2 ** (attempt + 2)
+                        print(f"\n  GraphQL error: {err_msg}, retrying in {wait}s...")
+                        time.sleep(wait)
+                        continue
+                    # Non-transient errors: print but return what we have
+                    print(f"\n  GraphQL error: {err_msg}")
+                return body
+            if resp.status_code in (403, 429, 502, 503):
+                wait = 2 ** (attempt + 2)
+                retry_after = resp.headers.get("Retry-After")
+                if retry_after:
+                    wait = max(wait, int(retry_after) + 1)
+                print(f"\n  HTTP {resp.status_code}, waiting {wait}s (attempt {attempt + 1})...")
+                time.sleep(wait)
+            else:
+                resp.raise_for_status()
+        except requests.exceptions.RequestException as e:
             wait = 2 ** (attempt + 2)
-            retry_after = resp.headers.get("Retry-After")
-            if retry_after:
-                wait = max(wait, int(retry_after) + 1)
-            print(f"\n  HTTP {resp.status_code}, waiting {wait}s (attempt {attempt + 1})...")
+            print(f"\n  {type(e).__name__}, retrying in {wait}s (attempt {attempt + 1})...")
             time.sleep(wait)
-        else:
-            resp.raise_for_status()
-    resp.raise_for_status()
-    return {}  # unreachable
+    raise RuntimeError(f"GraphQL query failed after {max_retries} retries")
 
 
 def _extract_readme(node: dict) -> str:
@@ -196,11 +200,24 @@ def fetch_repo_list() -> list[dict]:
                 cursor = page_info["endCursor"]
                 time.sleep(1)
 
-            if not edges or len(repos) >= TARGET_REPO_COUNT:
+            if len(repos) >= TARGET_REPO_COUNT:
                 break
 
+            if not edges:
+                # Empty result — could be transient; advance star range if possible
+                if not repos:
+                    break  # nothing fetched at all, give up
+                # Fall through to star_ceiling shift below
+
             # Next star range: at or below the last repo's count
-            star_ceiling = repos[-1]["stargazers_count"]
+            new_ceiling = repos[-1]["stargazers_count"]
+            if new_ceiling == star_ceiling:
+                # Stuck at the same star count — use strict less-than to skip past
+                new_ceiling -= 1
+                if new_ceiling < 1:
+                    break
+            star_ceiling = new_ceiling
+            print(f"\n  Shifting star ceiling to {star_ceiling} ({len(repos)} repos so far)")
             time.sleep(1)
 
     return repos[:TARGET_REPO_COUNT]

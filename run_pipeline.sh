@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export PYTHONUNBUFFERED=1
 LOG=data/pipeline.log
 {
   echo "=== Pipeline started at $(date) ==="
