@@ -1,7 +1,7 @@
 [project]
 name = "github-map"
 version = "0.1.0"
-description = "Fetch top 1K GitHub repos, embed READMEs, reduce to 2D, label topics, and visualize"
+description = "Fetch top 10K GitHub repos, embed READMEs, reduce to 2D, label topics, and visualize"
 requires-python = ">=3.10"
 dependencies = [
     "requests",
@@ -19,3 +19,6 @@ dependencies = [
     "python-dotenv",
     "sentence-transformers",
 ]
+
+[project.optional-dependencies]
+bigquery = ["google-cloud-bigquery"]

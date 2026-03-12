@@ -14,6 +14,8 @@ DATA_DIR = Path("data")
 DATA_DIR.mkdir(exist_ok=True)
 
 # ── File paths ───────────────────────────────────────────────────────────────
+CANDIDATES_CSV = DATA_DIR / "candidates.csv"
+CANDIDATES_COMMITTED = Path("candidates.csv")
 REPOS_PARQUET = DATA_DIR / "repos.parquet"
 EMBEDDINGS_NPZ = DATA_DIR / "embeddings.npz"
 UMAP_COORDS_NPZ = DATA_DIR / "umap_coords.npz"
@@ -32,9 +34,11 @@ DOCS_METHODOLOGY_HTML = DOCS_DIR / "methodology.html"
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 CO_API_KEY = os.environ.get("CO_API_KEY", "")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+GCP_PROJECT = os.environ.get("GCP_PROJECT", "")
 
 # ── Constants ────────────────────────────────────────────────────────────────
 TARGET_REPO_COUNT = 10_000
+GRAPHQL_BATCH_SIZE = 25
 COHERE_BATCH_SIZE = 96
 COHERE_EMBED_DIMENSION = 512
 ANTHROPIC_MODEL_SUMMARIZE = "claude-haiku-4-5"
