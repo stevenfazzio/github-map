@@ -24,12 +24,13 @@ from config import (
     CANDIDATES_CSV,
     GITHUB_TOKEN,
     GRAPHQL_BATCH_SIZE,
+    METADATA_PARQUET,
     REPOS_PARQUET,
     TARGET_REPO_COUNT,
 )
 
 CONCURRENT_REQUESTS = 5
-METADATA_BATCH_SIZE = 150  # No README blobs → much larger batches
+METADATA_BATCH_SIZE = 25  # GitHub GraphQL limits query complexity regardless of fields
 CHECKPOINT_EVERY = 50  # batches between checkpoints
 
 GRAPHQL_URL = "https://api.github.com/graphql"
@@ -304,16 +305,21 @@ def _fetch_concurrent(items, batch_size, fetch_fn, desc, combine_fn):
 def main():
     candidates = _load_candidates()
 
-    # Resume: load existing progress
+    # Resume: load existing metadata (full candidate pool, not just top N)
     existing_rows = {}
-    if REPOS_PARQUET.exists():
+    if METADATA_PARQUET.exists():
+        df_existing = pd.read_parquet(METADATA_PARQUET)
+        for row in df_existing.to_dict("records"):
+            existing_rows[row["full_name"]] = row
+        print(f"Resuming: {len(existing_rows)} repos in metadata cache")
+    elif REPOS_PARQUET.exists():
+        # Migrate from old layout where repos.parquet held everything
         df_existing = pd.read_parquet(REPOS_PARQUET)
         for row in df_existing.to_dict("records"):
             existing_rows[row["full_name"]] = row
-        print(f"Resuming: {len(existing_rows)} repos already fetched")
+        print(f"Migrated {len(existing_rows)} repos from {REPOS_PARQUET}")
 
     # --- Pass 1: Metadata (no READMEs) for all candidates ---
-    # Skip candidates we already have metadata for
     need_metadata = [c for c in candidates if c not in existing_rows]
     print(f"Pass 1 — metadata: {len(need_metadata)} candidates to fetch")
 
@@ -331,26 +337,26 @@ def main():
                             r[col] = val
                 existing_rows[name] = r
 
-        # Checkpoint after pass 1
-        df = pd.DataFrame(list(existing_rows.values()))
-        df.to_parquet(REPOS_PARQUET, index=False)
-        print(f"Pass 1 complete: {len(existing_rows)} total repos saved")
+    # Save full metadata cache (preserves all candidates for re-selection)
+    df_meta = pd.DataFrame(list(existing_rows.values()))
+    df_meta.to_parquet(METADATA_PARQUET, index=False)
+    print(f"Pass 1 complete: {len(existing_rows)} total repos in metadata cache")
 
-    # --- Sort and keep top N ---
+    # --- Sort all repos by stars ---
     all_rows = sorted(
         existing_rows.values(),
         key=lambda r: r.get("stargazers_count", 0),
         reverse=True,
     )
-    top_rows = all_rows[:TARGET_REPO_COUNT]
-    top_names = {r["full_name"] for r in top_rows}
-    if len(all_rows) > TARGET_REPO_COUNT:
-        min_stars = top_rows[-1].get("stargazers_count", 0)
-        print(f"Top {TARGET_REPO_COUNT} repos selected (min stars: {min_stars})")
 
-    # --- Pass 2: READMEs for top repos only ---
-    need_readme = [r["full_name"] for r in top_rows if not r.get("readme")]
-    print(f"Pass 2 — READMEs: {len(need_readme)} repos need READMEs")
+    # --- Pass 2: Fetch READMEs for an expanded pool ---
+    # We need TARGET_REPO_COUNT repos with non-empty READMEs. Overshoot by
+    # 20% to account for repos without READMEs, then expand further if needed.
+    pool_size = min(int(TARGET_REPO_COUNT * 1.2), len(all_rows))
+    pool = all_rows[:pool_size]
+
+    need_readme = [r["full_name"] for r in pool if not r.get("readme")]
+    print(f"Pass 2 — READMEs: {len(need_readme)} repos need READMEs (pool: {pool_size})")
 
     if need_readme:
         batch_results = _fetch_concurrent(
@@ -362,20 +368,28 @@ def main():
                 if name in existing_rows:
                     existing_rows[name]["readme"] = text
 
-    # --- Final save: top N only ---
-    final_rows = sorted(
-        (existing_rows[n] for n in top_names if n in existing_rows),
-        key=lambda r: r.get("stargazers_count", 0),
-        reverse=True,
-    )
-    # Ensure all rows have a readme column
-    for r in final_rows:
+        # Update metadata cache with READMEs
+        df_meta = pd.DataFrame(list(existing_rows.values()))
+        df_meta.to_parquet(METADATA_PARQUET, index=False)
+
+    # --- Final selection: top N repos with non-empty READMEs ---
+    final_rows = []
+    for r in all_rows:
         r.setdefault("readme", "")
+        if r["readme"]:
+            final_rows.append(r)
+            if len(final_rows) >= TARGET_REPO_COUNT:
+                break
+
+    if len(final_rows) < TARGET_REPO_COUNT:
+        print(f"Warning: only {len(final_rows)} repos have non-empty READMEs")
+
+    min_stars = final_rows[-1].get("stargazers_count", 0) if final_rows else 0
+    print(f"Selected {len(final_rows)} repos with READMEs (min stars: {min_stars})")
 
     df = pd.DataFrame(final_rows)
     df.to_parquet(REPOS_PARQUET, index=False)
     print(f"Done. Saved {len(df)} repos to {REPOS_PARQUET}")
-    print(f"  Non-empty READMEs: {(df['readme'].str.len() > 0).sum()}")
 
 
 if __name__ == "__main__":

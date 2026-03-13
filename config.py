@@ -16,6 +16,7 @@ DATA_DIR.mkdir(exist_ok=True)
 # ── File paths ───────────────────────────────────────────────────────────────
 CANDIDATES_CSV = DATA_DIR / "candidates.csv"
 CANDIDATES_COMMITTED = Path("candidates.csv")
+METADATA_PARQUET = DATA_DIR / "metadata.parquet"
 REPOS_PARQUET = DATA_DIR / "repos.parquet"
 EMBEDDINGS_NPZ = DATA_DIR / "embeddings.npz"
 UMAP_COORDS_NPZ = DATA_DIR / "umap_coords.npz"
