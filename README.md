@@ -48,7 +48,7 @@ The output `github_map.html` includes:
 - **Click to open** any repo on GitHub
 - **Search** repos by name
 - **Five colormaps**: primary language, star count, license type, license family, repo age
-- **Two-level topic labels** (coarse and fine) for cluster display
+- **Hierarchical topic labels** at multiple levels of detail for cluster display
 - **Methodology page** (`methodology.html`) linked from the nav bar
 
 ## Technical Details

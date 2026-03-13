@@ -76,32 +76,18 @@ def main():
         clusterable_vectors=coords,
     )
 
-    # Extract per-document labels from cluster layers
+    # Extract per-document labels from all cluster layers
+    # Layer 0 is finest, last layer is coarsest — DataMapPlot expects coarsest first
     n_layers = len(topic_model.cluster_layers_)
-    coarse_labels = []
-    fine_labels = []
-
-    if n_layers >= 2:
-        coarse_layer = topic_model.cluster_layers_[-1]
-        fine_layer = topic_model.cluster_layers_[0]
-    elif n_layers == 1:
-        coarse_layer = topic_model.cluster_layers_[0]
-        fine_layer = topic_model.cluster_layers_[0]
-    else:
+    if n_layers == 0:
         raise ValueError("No cluster layers found")
+    print(f"Toponymy produced {n_layers} cluster layer(s)")
 
-    for i in range(len(documents)):
-        coarse_labels.append(coarse_layer.topic_name_vector[i])
-        fine_labels.append(fine_layer.topic_name_vector[i])
+    labels_dict = {"full_name": df["full_name"]}
+    for i, layer in enumerate(reversed(topic_model.cluster_layers_)):
+        labels_dict[f"label_layer_{i}"] = layer.topic_name_vector
 
-    # Save labels
-    labels_df = pd.DataFrame(
-        {
-            "full_name": df["full_name"],
-            "coarse_label": coarse_labels,
-            "fine_label": fine_labels,
-        }
-    )
+    labels_df = pd.DataFrame(labels_dict)
     labels_df.to_parquet(LABELS_PARQUET, index=False)
     print(f"Saved labels to {LABELS_PARQUET}")
 

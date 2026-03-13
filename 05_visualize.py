@@ -24,8 +24,9 @@ def main():
     labels_df = pd.read_parquet(LABELS_PARQUET)
     coords = np.load(UMAP_COORDS_NPZ)["coords"]
 
-    coarse_labels = labels_df["coarse_label"].values
-    fine_labels = labels_df["fine_label"].values
+    # Collect all label layers (label_layer_0 = coarsest, label_layer_1, ... = finer)
+    label_columns = sorted(c for c in labels_df.columns if c.startswith("label_layer_"))
+    topic_name_vectors = [labels_df[c].values for c in label_columns]
 
     # ── Hover text ───────────────────────────────────────────────────────────
     has_summary = "summary" in df.columns
@@ -191,8 +192,7 @@ def main():
 
     fig = datamapplot.create_interactive_plot(
         coords,
-        coarse_labels,
-        fine_labels,
+        *topic_name_vectors,
         hover_text=hover_text,
         marker_size_array=marker_sizes,
         extra_point_data=extra_data,
@@ -439,7 +439,7 @@ code { font-size: 14px; background: #f5f5f5; padding: 2px 6px; border-radius: 3p
   <strong>5. Label topics</strong>
   <p><code>04_label_topics.py</code> &mdash; Uses the Toponymy library for hierarchical density-based
   clustering, then sends representative documents from each cluster to Claude Sonnet
-  to generate human-readable coarse and fine topic labels, saved to <code>labels.parquet</code>.</p>
+  to generate human-readable topic labels at multiple levels of detail, saved to <code>labels.parquet</code>.</p>
 </div>
 
 <div class="pipeline-step">
@@ -474,8 +474,9 @@ code { font-size: 14px; background: #f5f5f5; padding: 2px 6px; border-radius: 3p
   <li><strong>Search</strong> &mdash; Use the search box to find specific repositories by name.</li>
   <li><strong>Colormaps</strong> &mdash; Switch between colormaps using the dropdown to color points
   by language, star count, license, repo age, owner type, activity recency, fork count, or open issues.</li>
-  <li><strong>Topic labels</strong> &mdash; Cluster labels appear on the map at two levels of detail:
-  coarse (broad categories) and fine (specific sub-topics).</li>
+  <li><strong>Topic labels</strong> &mdash; Cluster labels appear on the map at multiple levels of detail,
+  from broad categories down to specific sub-topics. The number of levels is chosen
+  automatically by the clustering algorithm.</li>
 </ul>
 
 <h2 id="field-definitions">Field Definitions</h2>

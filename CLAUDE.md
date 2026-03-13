@@ -69,4 +69,4 @@ All outputs go to `data/` (gitignored). Key files: `candidates.csv`, `repos.parq
 
 ## Visualization Details
 
-`05_visualize.py` produces the main output — an interactive HTML map with multiple colormaps (language, stars, license, age), hover tooltips with summaries, click-to-open-repo, and search. It uses coarse/fine topic labels for clustering display.
+`05_visualize.py` produces the main output — an interactive HTML map with multiple colormaps (language, stars, license, age), hover tooltips with summaries, click-to-open-repo, and search. Toponymy's hierarchical cluster layers are passed directly to DataMapPlot for multi-level topic label display.
