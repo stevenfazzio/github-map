@@ -145,7 +145,7 @@ code { font-size: 14px; background: #f5f5f5; padding: 2px 6px; border-radius: 3p
   <strong>5. Label topics</strong>
   <p><code>04_label_topics.py</code> &mdash; Uses the Toponymy library for hierarchical density-based
   clustering, then sends representative documents from each cluster to Claude Sonnet
-  to generate human-readable coarse and fine topic labels, saved to <code>labels.parquet</code>.</p>
+  to generate human-readable topic labels at multiple levels of detail, saved to <code>labels.parquet</code>.</p>
 </div>
 
 <div class="pipeline-step">
@@ -180,8 +180,9 @@ code { font-size: 14px; background: #f5f5f5; padding: 2px 6px; border-radius: 3p
   <li><strong>Search</strong> &mdash; Use the search box to find specific repositories by name.</li>
   <li><strong>Colormaps</strong> &mdash; Switch between colormaps using the dropdown to color points
   by language, star count, license, repo age, owner type, activity recency, fork count, or open issues.</li>
-  <li><strong>Topic labels</strong> &mdash; Cluster labels appear on the map at two levels of detail:
-  coarse (broad categories) and fine (specific sub-topics).</li>
+  <li><strong>Topic labels</strong> &mdash; Cluster labels appear on the map at multiple levels of detail,
+  from broad categories down to specific sub-topics. The number of levels is chosen
+  automatically by the clustering algorithm.</li>
 </ul>
 
 <h2 id="field-definitions">Field Definitions</h2>
