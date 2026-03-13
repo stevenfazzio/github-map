@@ -5,10 +5,13 @@ min_clusters, descriptions, delimiters). Runs each config, audits results,
 and produces comparison outputs.
 """
 
+import argparse
 import asyncio
 import copy
 import itertools
+import tempfile
 
+import anthropic
 import numpy as np
 import pandas as pd
 from toponymy import Toponymy, ToponymyClusterer
@@ -16,7 +19,6 @@ from toponymy.audit import (
     create_comparison_df,
     create_keyphrase_analysis_df,
     create_layer_summary_df,
-    export_audit_excel,
 )
 from toponymy.embedding_wrappers import CohereEmbedder
 from toponymy.llm_wrappers import AsyncAnthropicNamer
@@ -38,20 +40,10 @@ from config import (
 # Each dict can override any key from DEFAULTS. Run free/local embedders first.
 
 EXPERIMENTS = [
-    {
-        "name": "detail_default",
-        # Baseline: inherits DEFAULTS (0.0, 1.0)
-    },
-    {
-        "name": "detail_medium",
-        "lowest_detail_level": 0.3,
-        "highest_detail_level": 0.8,
-    },
-    {
-        "name": "detail_concise",
-        "lowest_detail_level": 0.5,
-        "highest_detail_level": 1.0,
-    },
+    {"name": "detail_full_range", "lowest_detail_level": 0.0, "highest_detail_level": 1.0},
+    {"name": "detail_medium",     "lowest_detail_level": 0.3, "highest_detail_level": 0.8},
+    {"name": "detail_concise",    "lowest_detail_level": 0.5, "highest_detail_level": 1.0},
+    {"name": "detail_broad",      "lowest_detail_level": 0.3, "highest_detail_level": 1.0},
 ]
 
 DEFAULTS = {
@@ -59,7 +51,7 @@ DEFAULTS = {
     "llm": AsyncAnthropicNamer(api_key=ANTHROPIC_API_KEY, model="claude-sonnet-4-20250514"),
     "min_clusters": 4,
     "object_description": "GitHub repository descriptions",
-    "corpus_description": "collection of the top 1,000 most-starred GitHub repositories",
+    "corpus_description": "collection of the top 10,000 most-starred GitHub repositories",
     "exemplar_delimiters": ['    * """', '"""\n'],
     "lowest_detail_level": 0.0,
     "highest_detail_level": 1.0,
@@ -92,6 +84,48 @@ def load_data():
     return df, embeddings, coords, documents
 
 
+def validate_preflight(df, embeddings, coords):
+    """Run preflight checks before expensive experiment loop."""
+    errors = []
+
+    # Shape consistency
+    if embeddings.shape[0] != len(df):
+        errors.append(f"embeddings rows ({embeddings.shape[0]}) != df rows ({len(df)})")
+    if coords.shape[0] != len(df):
+        errors.append(f"coords rows ({coords.shape[0]}) != df rows ({len(df)})")
+    if embeddings.shape[1] != 512:
+        errors.append(f"embeddings dim ({embeddings.shape[1]}) != 512")
+
+    # API keys
+    if not CO_API_KEY:
+        errors.append("CO_API_KEY is empty")
+    if not ANTHROPIC_API_KEY:
+        errors.append("ANTHROPIC_API_KEY is empty")
+
+    # Dry-run LLM call
+    try:
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        client.messages.create(
+            model="claude-haiku-4-5",
+            max_tokens=1,
+            messages=[{"role": "user", "content": "ping"}],
+        )
+    except Exception as e:
+        errors.append(f"Anthropic API dry-run failed: {e}")
+
+    # Output dir writable
+    try:
+        with tempfile.NamedTemporaryFile(dir=EXPERIMENTS_DIR, delete=True):
+            pass
+    except Exception as e:
+        errors.append(f"Cannot write to {EXPERIMENTS_DIR}: {e}")
+
+    if errors:
+        raise RuntimeError("Preflight checks failed:\n  " + "\n  ".join(errors))
+
+    print("Preflight checks passed.")
+
+
 def extract_labels(model, documents):
     """Extract coarse/fine labels from a fitted Toponymy model."""
     n_layers = len(model.cluster_layers_)
@@ -106,7 +140,23 @@ def extract_labels(model, documents):
     return coarse_labels, fine_labels
 
 
-def run_experiments(df, embeddings, coords, documents):
+def save_audit_csvs(model, exp_dir):
+    """Save audit CSVs for a fitted model."""
+    # Layer summary
+    layer_summary = create_layer_summary_df(model)
+    layer_summary.to_csv(exp_dir / "audit_layer_summary.csv", index=False)
+
+    # Per-layer comparison and keyphrase CSVs
+    n_layers = len(model.cluster_layers_)
+    for i in range(n_layers):
+        comp = create_comparison_df(model, layer_index=i)
+        comp.to_csv(exp_dir / f"audit_comparison_layer{i}.csv", index=False)
+
+        kp = create_keyphrase_analysis_df(model, layer_index=i)
+        kp.to_csv(exp_dir / f"audit_keyphrase_layer{i}.csv", index=False)
+
+
+def run_experiments(df, embeddings, coords, documents, resume=False):
     """Fit Toponymy for each experiment config, return dict of fitted models."""
     default_min = DEFAULTS["min_clusters"]
     base_clusterer = ToponymyClusterer(min_clusters=default_min)
@@ -115,6 +165,15 @@ def run_experiments(df, embeddings, coords, documents):
     models = {}
     for exp in EXPERIMENTS:
         name = exp["name"]
+        exp_dir = EXPERIMENTS_DIR / name
+        exp_dir.mkdir(exist_ok=True)
+
+        if resume and (exp_dir / "labels.parquet").exists():
+            print(f"\n{'='*60}")
+            print(f"Skipping experiment (resume): {name}")
+            print(f"{'='*60}")
+            continue
+
         cfg = {**DEFAULTS, **exp}
         print(f"\n{'='*60}")
         print(f"Running experiment: {name}")
@@ -146,9 +205,6 @@ def run_experiments(df, embeddings, coords, documents):
         models[name] = topic_model
 
         # Save per-experiment outputs
-        exp_dir = EXPERIMENTS_DIR / name
-        exp_dir.mkdir(exist_ok=True)
-
         coarse_labels, fine_labels = extract_labels(topic_model, documents)
         labels_df = pd.DataFrame({
             "full_name": df["full_name"],
@@ -158,10 +214,10 @@ def run_experiments(df, embeddings, coords, documents):
         labels_df.to_parquet(exp_dir / "labels.parquet", index=False)
         print(f"  Saved labels to {exp_dir / 'labels.parquet'}")
 
-        export_audit_excel(topic_model, filename=str(exp_dir / "audit.xlsx"))
-        print(f"  Saved audit to {exp_dir / 'audit.xlsx'}")
+        save_audit_csvs(topic_model, exp_dir)
+        print(f"  Saved audit CSVs to {exp_dir}")
 
-        # Save disambiguation stats (not in audit Excel, only on in-memory model)
+        # Save disambiguation stats
         disambig_rows = []
         for li, layer in enumerate(topic_model.cluster_layers_):
             indices = getattr(layer, "dismbiguation_topic_indices", None)
@@ -179,105 +235,153 @@ def run_experiments(df, embeddings, coords, documents):
     return models
 
 
-def print_audit_summary(name, model):
-    """Print audit summary for a single experiment."""
-    print(f"\n── {name} ──")
-    layer_summary = create_layer_summary_df(model)
-    print(layer_summary.to_string(index=False))
+def compare_experiments():
+    """Compare experiments by reading saved CSVs from disk.
 
-    n_layers = len(model.cluster_layers_)
-    for layer_idx in range(n_layers):
-        label = ["fine", "mid", "coarse"][layer_idx] if n_layers == 3 else f"layer {layer_idx}"
-        comp = create_comparison_df(model, layer_index=layer_idx)
-        lengths = comp["Final LLM Topic Name"].astype(str).str.len()
-        print(f"  Avg topic name length ({label}): {lengths.mean():.1f} chars "
-              f"(min {lengths.min()}, max {lengths.max()})")
+    This works whether experiments were just run or skipped via --resume.
+    """
+    # Discover which experiments have completed (have labels.parquet)
+    experiment_names = []
+    for exp in EXPERIMENTS:
+        exp_dir = EXPERIMENTS_DIR / exp["name"]
+        if (exp_dir / "labels.parquet").exists():
+            experiment_names.append(exp["name"])
 
-    # Disambiguation effort: how many topic groups needed renaming per layer
-    for layer_idx in range(n_layers):
-        label = ["fine", "mid", "coarse"][layer_idx] if n_layers == 3 else f"layer {layer_idx}"
-        layer = model.cluster_layers_[layer_idx]
-        indices = getattr(layer, "dismbiguation_topic_indices", None)
-        if indices is not None:
-            n_groups = len(indices)
-            n_topics = sum(len(g) for g in indices)
-            total = len(layer.topic_names)
-            print(f"  Disambiguation ({label}): {n_groups} groups, "
-                  f"{n_topics}/{total} topics needed renaming")
-        else:
-            print(f"  Disambiguation ({label}): no data (attribute not found)")
-
-    for layer_idx in [0, -1]:
-        label = "fine" if layer_idx == 0 else "coarse"
-        kp_df = create_keyphrase_analysis_df(model, layer_index=layer_idx)
-        if "keyphrase_in_topic" in kp_df.columns:
-            rate = kp_df["keyphrase_in_topic"].mean()
-            print(f"  Keyphrase-in-topic-name rate ({label}): {rate:.1%}")
-
-
-def compare_experiments(models, documents):
-    """Print pairwise comparison metrics and save comparison Excel."""
-    names = list(models.keys())
-
-    print(f"\n{'='*60}")
-    print("Audit summaries")
-    print(f"{'='*60}")
-    for name, model in models.items():
-        print_audit_summary(name, model)
-
-    if len(names) < 2:
-        print("\nOnly one experiment — skipping pairwise comparison.")
+    if not experiment_names:
+        print("No completed experiments found. Nothing to compare.")
         return
 
-    # Build comparison workbook
-    with pd.ExcelWriter(EXPERIMENTS_DIR / "comparison.xlsx", engine="openpyxl") as writer:
-        for layer_idx, label in [(0, "fine"), (-1, "coarse")]:
-            rows = []
-            for name, model in models.items():
-                comp = create_comparison_df(model, layer_index=layer_idx)
+    print(f"\n{'='*60}")
+    print("Comparison across experiments")
+    print(f"{'='*60}")
+    print(f"Experiments: {', '.join(experiment_names)}")
+
+    md_lines = ["# Experiment Comparison\n"]
+
+    # Print audit summaries from saved CSVs
+    md_lines.append("## Audit Summaries\n")
+    for name in experiment_names:
+        exp_dir = EXPERIMENTS_DIR / name
+        print(f"\n-- {name} --")
+        md_lines.append(f"### {name}\n")
+
+        summary_path = exp_dir / "audit_layer_summary.csv"
+        if summary_path.exists():
+            summary_df = pd.read_csv(summary_path)
+            print(summary_df.to_string(index=False))
+            md_lines.append("**Layer summary:**\n")
+            md_lines.append(summary_df.to_markdown(index=False))
+            md_lines.append("")
+
+        # Find all comparison layer files to determine layer count
+        layer_idx = 0
+        while (exp_dir / f"audit_comparison_layer{layer_idx}.csv").exists():
+            comp = pd.read_csv(exp_dir / f"audit_comparison_layer{layer_idx}.csv")
+            if "Final LLM Topic Name" in comp.columns:
+                lengths = comp["Final LLM Topic Name"].astype(str).str.len()
+                print(f"  Layer {layer_idx} avg topic name length: {lengths.mean():.1f} chars "
+                      f"(min {lengths.min()}, max {lengths.max()})")
+            layer_idx += 1
+
+        # Keyphrase-in-topic rates from saved keyphrase CSVs
+        for li in [0]:  # fine layer
+            kp_path = exp_dir / f"audit_keyphrase_layer{li}.csv"
+            if kp_path.exists():
+                kp_df = pd.read_csv(kp_path)
+                if "keyphrase_in_topic" in kp_df.columns:
+                    rate = kp_df["keyphrase_in_topic"].mean()
+                    print(f"  Keyphrase-in-topic rate (layer {li}): {rate:.1%}")
+                    md_lines.append(f"Keyphrase-in-topic rate (layer {li}): {rate:.1%}\n")
+
+    if len(experiment_names) < 2:
+        print("\nOnly one experiment -- skipping pairwise comparison.")
+        md_lines.append("\nOnly one experiment -- no pairwise comparison.\n")
+        (EXPERIMENTS_DIR / "comparison_summary.md").write_text("\n".join(md_lines))
+        return
+
+    # Build side-by-side comparison CSVs for fine and coarse layers
+    md_lines.append("\n## Pairwise Comparisons\n")
+    for layer_idx, label in [(0, "fine"), (-1, "coarse")]:
+        print(f"\n-- {label} layer comparison --")
+        md_lines.append(f"### {label.title()} layer\n")
+
+        rows = []
+        for name in experiment_names:
+            exp_dir = EXPERIMENTS_DIR / name
+            # Resolve negative index: find max layer
+            if layer_idx < 0:
+                actual_idx = 0
+                while (exp_dir / f"audit_comparison_layer{actual_idx + 1}.csv").exists():
+                    actual_idx += 1
+                idx = actual_idx
+            else:
+                idx = layer_idx
+            comp_path = exp_dir / f"audit_comparison_layer{idx}.csv"
+            if comp_path.exists():
+                comp = pd.read_csv(comp_path)
                 comp = comp.rename(columns={"Final LLM Topic Name": f"topic_{name}"})
                 rows.append((name, comp))
 
-            # Merge on Cluster ID for side-by-side
-            keyphrases_col = "Extracted Keyphrases (Top 5)"
-            merged = rows[0][1][["Cluster ID", "Document Count", keyphrases_col, f"topic_{rows[0][0]}"]].copy()
-            for exp_name, comp in rows[1:]:
-                right = comp[["Cluster ID", f"topic_{exp_name}"]].copy()
-                merged = merged.merge(right, on="Cluster ID", how="outer")
-            merged.to_excel(writer, sheet_name=f"{label}_comparison", index=False)
+        if not rows:
+            continue
 
-            # Summary metrics
-            topic_cols = [f"topic_{n}" for n in names]
-            print(f"\n── {label} layer comparison ──")
+        # Merge on Cluster ID for side-by-side
+        keyphrases_col = "Extracted Keyphrases (Top 5)"
+        base_cols = ["Cluster ID", "Document Count"]
+        if keyphrases_col in rows[0][1].columns:
+            base_cols.append(keyphrases_col)
+        merged = rows[0][1][base_cols + [f"topic_{rows[0][0]}"]].copy()
+        for exp_name, comp in rows[1:]:
+            right = comp[["Cluster ID", f"topic_{exp_name}"]].copy()
+            merged = merged.merge(right, on="Cluster ID", how="outer")
 
-            # Unique topic counts and avg name length
-            for col in topic_cols:
+        merged.to_csv(EXPERIMENTS_DIR / f"comparison_{label}.csv", index=False)
+        print(f"  Saved {EXPERIMENTS_DIR / f'comparison_{label}.csv'}")
+
+        # Summary metrics
+        topic_cols = [f"topic_{n}" for n in experiment_names]
+        for col in topic_cols:
+            if col in merged.columns:
                 n_unique = merged[col].nunique()
                 avg_len = merged[col].astype(str).str.len().mean()
-                print(f"  Unique topics ({col}): {n_unique}, avg name length: {avg_len:.1f} chars")
+                line = f"  Unique topics ({col}): {n_unique}, avg name length: {avg_len:.1f} chars"
+                print(line)
+                md_lines.append(f"- {line.strip()}")
 
-            # Pairwise comparisons
-            for name_a, name_b in itertools.combinations(names, 2):
-                col_a, col_b = f"topic_{name_a}", f"topic_{name_b}"
+        md_lines.append("")
+
+        # Pairwise agreement
+        for name_a, name_b in itertools.combinations(experiment_names, 2):
+            col_a, col_b = f"topic_{name_a}", f"topic_{name_b}"
+            if col_a in merged.columns and col_b in merged.columns:
                 agree = (merged[col_a] == merged[col_b]).mean()
-                print(f"  Topic name agreement ({name_a} vs {name_b}): {agree:.1%}")
+                line = f"  Topic name agreement ({name_a} vs {name_b}): {agree:.1%}"
+                print(line)
+                md_lines.append(f"- {line.strip()}")
 
                 diff_mask = merged[col_a] != merged[col_b]
-                diff_rows = merged[diff_mask].head(5)
+                diff_rows = merged[diff_mask].head(3)
                 if not diff_rows.empty:
                     print(f"  Example divergent clusters ({name_a} vs {name_b}):")
                     for _, row in diff_rows.iterrows():
                         print(f"    Cluster {row['Cluster ID']}: "
                               f"{row[col_a]!r} vs {row[col_b]!r}")
 
-        # Keyphrase overlap (Jaccard) for coarse layer
-        print(f"\n── Keyphrase overlap (coarse, Jaccard) ──")
-        kp_dfs = {}
-        for name, model in models.items():
-            kp = create_comparison_df(model, layer_index=0)
-            kp_dfs[name] = kp.set_index("Cluster ID")["Extracted Keyphrases (Top 5)"]
+        md_lines.append("")
 
-        for name_a, name_b in itertools.combinations(names, 2):
+    # Keyphrase overlap (Jaccard) for fine layer
+    print(f"\n-- Keyphrase overlap (fine, Jaccard) --")
+    md_lines.append("## Keyphrase Overlap (fine layer, Jaccard)\n")
+    kp_dfs = {}
+    for name in experiment_names:
+        kp_path = EXPERIMENTS_DIR / name / "audit_comparison_layer0.csv"
+        if kp_path.exists():
+            kp = pd.read_csv(kp_path)
+            if "Extracted Keyphrases (Top 5)" in kp.columns:
+                kp_dfs[name] = kp.set_index("Cluster ID")["Extracted Keyphrases (Top 5)"]
+
+    for name_a, name_b in itertools.combinations(experiment_names, 2):
+        if name_a in kp_dfs and name_b in kp_dfs:
             common_ids = kp_dfs[name_a].index.intersection(kp_dfs[name_b].index)
             jaccard_scores = []
             for cid in common_ids:
@@ -289,17 +393,29 @@ def compare_experiments(models, documents):
 
             if jaccard_scores:
                 mean_jaccard = np.mean(jaccard_scores)
-                print(f"  Mean Jaccard similarity ({name_a} vs {name_b}): {mean_jaccard:.3f}")
+                line = f"  Mean Jaccard similarity ({name_a} vs {name_b}): {mean_jaccard:.3f}"
+                print(line)
+                md_lines.append(f"- {line.strip()}")
 
-    print(f"\nSaved comparison to {EXPERIMENTS_DIR / 'comparison.xlsx'}")
+    # Write summary markdown
+    md_lines.append(f"\n---\n*Generated by 04b_experiment.py*\n")
+    (EXPERIMENTS_DIR / "comparison_summary.md").write_text("\n".join(md_lines))
+    print(f"\nSaved comparison summary to {EXPERIMENTS_DIR / 'comparison_summary.md'}")
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Run Toponymy detail-level experiments")
+    parser.add_argument("--resume", action="store_true",
+                        help="Skip experiments with existing labels.parquet")
+    args = parser.parse_args()
+
     df, embeddings, coords, documents = load_data()
     print(f"Loaded {len(documents)} documents")
 
-    models = run_experiments(df, embeddings, coords, documents)
-    compare_experiments(models, documents)
+    validate_preflight(df, embeddings, coords)
+
+    run_experiments(df, embeddings, coords, documents, resume=args.resume)
+    compare_experiments()
 
     print("\nDone.")
 
