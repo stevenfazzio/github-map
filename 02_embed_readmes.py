@@ -12,17 +12,6 @@ def main():
     df = pd.read_parquet(REPOS_PARQUET)
     print(f"Loaded {len(df)} repos")
 
-    # Drop repos with READMEs too short to embed meaningfully
-    MIN_README_CHARS = 200
-    readme_len = df["readme"].str.strip().str.len().fillna(0)
-    short_mask = readme_len < MIN_README_CHARS
-    dropped = short_mask.sum()
-    if dropped:
-        print(f"Dropping {dropped} repos with README < {MIN_README_CHARS} chars")
-        df = df[~short_mask].reset_index(drop=True)
-        df.to_parquet(REPOS_PARQUET, index=False)
-        print(f"Saved filtered {len(df)} repos to {REPOS_PARQUET}")
-
     texts = [row["readme"].strip() for _, row in df.iterrows()]
 
     co = cohere.ClientV2(api_key=CO_API_KEY)

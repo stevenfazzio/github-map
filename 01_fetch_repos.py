@@ -372,11 +372,14 @@ def main():
         df_meta = pd.DataFrame(list(existing_rows.values()))
         df_meta.to_parquet(METADATA_PARQUET, index=False)
 
-    # --- Final selection: top N repos with non-empty READMEs ---
+    # --- Final selection: top N repos with usable READMEs ---
+    # Filter out empty and very short READMEs (< 200 chars) so downstream
+    # scripts don't need to drop repos and reduce the count below target.
+    MIN_README_CHARS = 200
     final_rows = []
     for r in all_rows:
         r.setdefault("readme", "")
-        if r["readme"]:
+        if len(r["readme"].strip()) >= MIN_README_CHARS:
             final_rows.append(r)
             if len(final_rows) >= TARGET_REPO_COUNT:
                 break

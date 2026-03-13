@@ -86,7 +86,7 @@ code { font-size: 14px; background: #f5f5f5; padding: 2px 6px; border-radius: 3p
 
 <h2 id="overview">Overview</h2>
 <p>
-  This visualization maps the top 1,000 most-starred GitHub repositories onto a 2D plane,
+  This visualization maps the top 10,000 most-starred GitHub repositories onto a 2D plane,
   positioned by the semantic similarity of their README files. Repositories with similar
   descriptions and purposes appear near each other, revealing natural clusters of related
   projects across the open-source ecosystem.
@@ -101,8 +101,13 @@ code { font-size: 14px; background: #f5f5f5; padding: 2px 6px; border-radius: 3p
 <h2 id="corpus-collection">Corpus Collection</h2>
 <p>
   Repositories are sourced from the GitHub Search API, ranked by star count in descending
-  order. The pipeline fetches the top 1,000 repositories, collecting metadata (name, stars,
+  order. The pipeline fetches the top 10,000 repositories, collecting metadata (name, stars,
   language, license, creation date) and the full README content for each.
+</p>
+<p>
+  Repositories whose READMEs are shorter than 200 characters after stripping whitespace are
+  excluded before embedding. These include empty READMEs, placeholder files, and monorepo
+  pointers that lack sufficient content for meaningful embedding and map placement.
 </p>
 <p>
   Each README is then summarized into a concise description using Claude Haiku, providing
@@ -113,7 +118,7 @@ code { font-size: 14px; background: #f5f5f5; padding: 2px 6px; border-radius: 3p
 
 <div class="pipeline-step">
   <strong>1. Fetch repositories</strong>
-  <p><code>01_fetch_repos.py</code> &mdash; Queries the GitHub GraphQL API for the top 1,000
+  <p><code>01_fetch_repos.py</code> &mdash; Queries the GitHub GraphQL API for the top 10,000
   most-starred repos, fetching metadata and README content in a single query per page,
   and saves everything to <code>repos.parquet</code>.</p>
 </div>
