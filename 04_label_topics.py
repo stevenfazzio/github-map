@@ -67,7 +67,7 @@ def main():
         object_description="GitHub repository descriptions",
         corpus_description="collection of the top 1,000 most-starred GitHub repositories",
         exemplar_delimiters=['    * """', '"""\n'],
-        lowest_detail_level=0.5,
+        lowest_detail_level=0.3,
         highest_detail_level=1.0,
     )
     topic_model.fit(
