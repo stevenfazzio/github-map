@@ -58,6 +58,11 @@ candidates.csv ──> repos.parquet ──┬──> embeddings.npz ──> uma
 - DataMapPlot for the final interactive HTML visualization
 - Claude Haiku for README summarization, Claude Sonnet for topic naming
 
+## Data Pipeline Rules
+
+- NEVER overwrite existing parquet/data files in-place. Always write to new files (e.g., with timestamp or version suffix) and only replace originals after verification. Treat fetched data as expensive/irreplaceable.
+- For GitHub API calls (GraphQL or REST), always implement retry with exponential backoff, handling 502, ReadTimeout, and ChunkedEncodingError. Never assume a single request pattern will scale.
+
 ## Data Directory
 
 All outputs go to `data/` (gitignored). Key files: `candidates.csv`, `repos.parquet`, `embeddings.npz`, `umap_coords.npz`, `labels.parquet`, `toponymy_model.joblib`, `github_map.html`.
