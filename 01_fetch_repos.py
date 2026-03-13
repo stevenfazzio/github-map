@@ -1,106 +1,132 @@
-"""Fetch top 1K GitHub repos by stars via GraphQL (metadata + README in one query)."""
+"""Fetch repo metadata + READMEs via batched GraphQL direct lookups.
 
+Two-pass approach for speed:
+  1. Metadata-only pass: fetch all ~25K candidates with large batches (no README blobs).
+  2. README pass: fetch READMEs only for the top TARGET_REPO_COUNT repos by stars.
+
+Reads candidate repo names from data/candidates.csv (produced by
+00_enumerate_repos.py or copied from committed fallback).
+"""
+
+import csv
 import json
+import shutil
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
 import requests
 from tqdm import tqdm
 
-from config import GITHUB_TOKEN, REPOS_PARQUET, TARGET_REPO_COUNT
+from config import (
+    CANDIDATES_COMMITTED,
+    CANDIDATES_CSV,
+    GITHUB_TOKEN,
+    GRAPHQL_BATCH_SIZE,
+    METADATA_PARQUET,
+    REPOS_PARQUET,
+    TARGET_REPO_COUNT,
+)
+
+CONCURRENT_REQUESTS = 5
+METADATA_BATCH_SIZE = 25  # GitHub GraphQL limits query complexity regardless of fields
+CHECKPOINT_EVERY = 50  # batches between checkpoints
 
 GRAPHQL_URL = "https://api.github.com/graphql"
 HEADERS = {
     "Authorization": f"Bearer {GITHUB_TOKEN}",
     "Content-Type": "application/json",
 }
-PER_PAGE = 10  # GitHub GraphQL 502s with large batches due to README blob lookups
 
-QUERY = """
-query ($queryString: String!, $cursor: String) {
-  search(query: $queryString, type: REPOSITORY, first: 10, after: $cursor) {
-    pageInfo { hasNextPage endCursor }
-    edges {
-      node {
-        ... on Repository {
-          nameWithOwner
-          description
-          primaryLanguage { name }
-          stargazerCount
-          licenseInfo { spdxId }
-          createdAt
-          repositoryTopics(first: 20) { nodes { topic { name } } }
-          pushedAt
-          forkCount
-          isArchived
-          diskUsage
-          hasWikiEnabled
-          hasDiscussionsEnabled
-          watchers { totalCount }
-          issues(states: OPEN) { totalCount }
-          pullRequests(states: OPEN) { totalCount }
-          releases { totalCount }
-          discussions { totalCount }
-          fundingLinks { platform url }
-          defaultBranchRef {
-            name
-            target { ... on Commit { history { totalCount } } }
-          }
-          owner { __typename }
-          languages(first: 10, orderBy: {field: SIZE, direction: DESC}) {
-            edges { size node { name } }
-          }
-          readme_md: object(expression: "HEAD:README.md") { ... on Blob { text } }
-          readme_lower: object(expression: "HEAD:readme.md") { ... on Blob { text } }
-        }
-      }
-    }
+METADATA_FRAGMENT = """
+fragment MetadataFields on Repository {
+  nameWithOwner
+  description
+  primaryLanguage { name }
+  stargazerCount
+  licenseInfo { spdxId }
+  createdAt
+  repositoryTopics(first: 20) { nodes { topic { name } } }
+  pushedAt
+  forkCount
+  isArchived
+  diskUsage
+  hasWikiEnabled
+  hasDiscussionsEnabled
+  watchers { totalCount }
+  issues(states: OPEN) { totalCount }
+  pullRequests(states: OPEN) { totalCount }
+  releases { totalCount }
+  discussions { totalCount }
+  fundingLinks { platform url }
+  defaultBranchRef {
+    name
+    target { ... on Commit { history { totalCount } } }
+  }
+  owner { __typename }
+  languages(first: 10, orderBy: {field: SIZE, direction: DESC}) {
+    edges { size node { name } }
   }
 }
 """
 
+README_FRAGMENT = """
+fragment ReadmeFields on Repository {
+  nameWithOwner
+  readme_md: object(expression: "HEAD:README.md") { ... on Blob { text } }
+  readme_lower: object(expression: "HEAD:readme.md") { ... on Blob { text } }
+}
+"""
 
-def _graphql_query(query: str, variables: dict, max_retries: int = 5) -> dict:
+
+def _graphql_query(query: str, variables: dict | None = None, max_retries: int = 5) -> dict:
     """Execute a GraphQL query with rate-limit-aware retry."""
-    for attempt in range(max_retries):
-        resp = requests.post(
-            GRAPHQL_URL,
-            headers=HEADERS,
-            json={"query": query, "variables": variables},
-            timeout=60,
-        )
-        # Check rate limit budget proactively
-        remaining = int(resp.headers.get("X-RateLimit-Remaining", 5000))
-        if remaining < 500:
-            reset_at = int(resp.headers.get("X-RateLimit-Reset", 0))
-            wait = max(reset_at - int(time.time()), 10)
-            print(f"\n  Rate limit low ({remaining} remaining), waiting {wait}s...")
-            time.sleep(wait)
+    payload = {"query": query}
+    if variables:
+        payload["variables"] = variables
 
-        if resp.status_code == 200:
-            body = resp.json()
-            if "errors" in body:
-                # Some GraphQL errors are transient
-                err_msg = body["errors"][0].get("message", "")
-                if "rate limit" in err_msg.lower() or "timeout" in err_msg.lower():
-                    wait = 2 ** (attempt + 2)
-                    print(f"\n  GraphQL error: {err_msg}, retrying in {wait}s...")
-                    time.sleep(wait)
-                    continue
-                # Non-transient errors: print but return what we have
-                print(f"\n  GraphQL error: {err_msg}")
-            return body
-        if resp.status_code in (403, 429, 502, 503):
+    for attempt in range(max_retries):
+        try:
+            resp = requests.post(
+                GRAPHQL_URL,
+                headers=HEADERS,
+                json=payload,
+                timeout=60,
+            )
+            # Check rate limit budget proactively
+            remaining = int(resp.headers.get("X-RateLimit-Remaining", 5000))
+            if remaining < 500:
+                reset_at = int(resp.headers.get("X-RateLimit-Reset", 0))
+                wait = max(reset_at - int(time.time()), 10)
+                print(f"\n  Rate limit low ({remaining} remaining), waiting {wait}s...")
+                time.sleep(wait)
+
+            if resp.status_code == 200:
+                body = resp.json()
+                if "errors" in body:
+                    err_msg = body["errors"][0].get("message", "")
+                    if "rate limit" in err_msg.lower() or "timeout" in err_msg.lower():
+                        wait = 2 ** (attempt + 2)
+                        print(f"\n  GraphQL error: {err_msg}, retrying in {wait}s...")
+                        time.sleep(wait)
+                        continue
+                    print(f"\n  GraphQL error: {err_msg}")
+                return body
+            if resp.status_code in (403, 429, 502, 503):
+                wait = 2 ** (attempt + 2)
+                retry_after = resp.headers.get("Retry-After")
+                if retry_after:
+                    wait = max(wait, int(retry_after) + 1)
+                print(f"\n  HTTP {resp.status_code}, waiting {wait}s (attempt {attempt + 1})...")
+                time.sleep(wait)
+            else:
+                resp.raise_for_status()
+        except requests.exceptions.RequestException as e:
             wait = 2 ** (attempt + 2)
-            retry_after = resp.headers.get("Retry-After")
-            if retry_after:
-                wait = max(wait, int(retry_after) + 1)
-            print(f"\n  HTTP {resp.status_code}, waiting {wait}s (attempt {attempt + 1})...")
+            print(f"\n  {type(e).__name__}, retrying in {wait}s (attempt {attempt + 1})...")
             time.sleep(wait)
-        else:
-            resp.raise_for_status()
-    resp.raise_for_status()
-    return {}  # unreachable
+    raise RuntimeError(f"GraphQL query failed after {max_retries} retries")
 
 
 def _extract_readme(node: dict) -> str:
@@ -112,9 +138,8 @@ def _extract_readme(node: dict) -> str:
     return ""
 
 
-def _parse_node(node: dict) -> dict:
-    """Parse a GraphQL Repository node into a flat row dict."""
-    # Core fields (backward-compatible with REST version)
+def _parse_metadata(node: dict) -> dict:
+    """Parse a GraphQL Repository node into a flat row dict (no README)."""
     topics_list = [
         t["topic"]["name"]
         for t in (node.get("repositoryTopics") or {}).get("nodes", [])
@@ -128,7 +153,6 @@ def _parse_node(node: dict) -> dict:
     )
 
     return {
-        # Existing columns
         "full_name": node["nameWithOwner"],
         "description": node.get("description") or "",
         "language": (node.get("primaryLanguage") or {}).get("name", ""),
@@ -136,8 +160,6 @@ def _parse_node(node: dict) -> dict:
         "license": (node.get("licenseInfo") or {}).get("spdxId", ""),
         "created_at": node.get("createdAt", ""),
         "topics": ",".join(topics_list),
-        "readme": _extract_readme(node),
-        # New columns
         "pushed_at": node.get("pushedAt") or "",
         "fork_count": node.get("forkCount", 0),
         "is_archived": node.get("isArchived", False),
@@ -157,121 +179,220 @@ def _parse_node(node: dict) -> dict:
     }
 
 
-def fetch_repo_list() -> list[dict]:
-    """Fetch top repos by star count using GraphQL with star-range pagination."""
-    repos = []
-    seen = set()
-    star_ceiling = None
+def _load_candidates() -> list[str]:
+    """Load candidate repo names from CSV, falling back to committed file."""
+    if not CANDIDATES_CSV.exists():
+        if CANDIDATES_COMMITTED.exists():
+            print(f"Copying committed {CANDIDATES_COMMITTED} → {CANDIDATES_CSV}")
+            CANDIDATES_CSV.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(CANDIDATES_COMMITTED, CANDIDATES_CSV)
+        else:
+            raise FileNotFoundError(
+                f"No candidates file found. Run 00_enumerate_repos.py first, "
+                f"or place candidates.csv in the repo root."
+            )
 
-    with tqdm(total=TARGET_REPO_COUNT, desc="Fetching repos") as pbar:
-        while len(repos) < TARGET_REPO_COUNT:
-            q = f"stars:<={star_ceiling}" if star_ceiling else "stars:>=1"
-            q += " sort:stars-desc"
-            cursor = None
-
-            while len(repos) < TARGET_REPO_COUNT:
-                variables = {"queryString": q, "cursor": cursor}
-                result = _graphql_query(QUERY, variables)
-
-                search = result.get("data", {}).get("search", {})
-                edges = search.get("edges", [])
-                if not edges:
-                    break
-
-                for edge in edges:
-                    node = edge.get("node")
-                    if not node or "nameWithOwner" not in node:
-                        continue
-                    name = node["nameWithOwner"]
-                    if name not in seen:
-                        seen.add(name)
-                        repos.append(_parse_node(node))
-                        pbar.update(1)
-                        if len(repos) >= TARGET_REPO_COUNT:
-                            break
-
-                page_info = search.get("pageInfo", {})
-                if not page_info.get("hasNextPage") or len(repos) >= TARGET_REPO_COUNT:
-                    break
-                cursor = page_info["endCursor"]
-                time.sleep(1)
-
-            if not edges or len(repos) >= TARGET_REPO_COUNT:
-                break
-
-            # Next star range: at or below the last repo's count
-            star_ceiling = repos[-1]["stargazers_count"]
-            time.sleep(1)
-
-    return repos[:TARGET_REPO_COUNT]
+    candidates = []
+    with open(CANDIDATES_CSV) as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            name = row["full_name"].strip()
+            if "/" in name:
+                candidates.append(name)
+    print(f"Loaded {len(candidates)} candidates from {CANDIDATES_CSV}")
+    return candidates
 
 
-# Default values for new columns (used when backfilling old parquet files)
-_NEW_COLUMN_DEFAULTS = {
-    "pushed_at": "",
-    "fork_count": 0,
-    "is_archived": False,
-    "disk_usage_kb": 0,
-    "has_wiki": False,
-    "has_discussions": False,
-    "watcher_count": 0,
-    "open_issue_count": 0,
-    "open_pr_count": 0,
-    "release_count": 0,
-    "discussion_count": 0,
-    "has_funding": False,
-    "default_branch": "",
-    "commit_count": 0,
-    "owner_type": "",
-    "languages_json": "[]",
-}
+def _build_batch_query(repos: list[str], fragment: str) -> str:
+    """Build a batched GraphQL query with aliased repository() lookups."""
+    # Determine fragment name from content
+    if "MetadataFields" in fragment:
+        spread = "MetadataFields"
+    else:
+        spread = "ReadmeFields"
+
+    parts = []
+    for i, full_name in enumerate(repos):
+        owner, name = full_name.split("/", 1)
+        owner = owner.replace('"', '\\"')
+        name = name.replace('"', '\\"')
+        parts.append(f'  repo{i}: repository(owner: "{owner}", name: "{name}") {{ ...{spread} }}')
+    query_body = "\n".join(parts)
+    return f"query {{\n{query_body}\n}}\n{fragment}"
+
+
+def _fetch_metadata_batch(repos: list[str]) -> list[dict]:
+    """Fetch metadata for a batch (no READMEs), splitting on failure."""
+    query = _build_batch_query(repos, METADATA_FRAGMENT)
+    try:
+        result = _graphql_query(query)
+    except RuntimeError:
+        if len(repos) <= 5:
+            raise
+        half = len(repos) // 2
+        print(f"\n  Metadata batch failed, splitting into two sub-batches of {half}")
+        left = _fetch_metadata_batch(repos[:half])
+        right = _fetch_metadata_batch(repos[half:])
+        return left + right
+
+    data = result.get("data") or {}
+    rows = []
+    for i in range(len(repos)):
+        node = data.get(f"repo{i}")
+        if node is None:
+            continue
+        try:
+            rows.append(_parse_metadata(node))
+        except (KeyError, TypeError) as e:
+            print(f"\n  Skipping {repos[i]}: parse error: {e}")
+    return rows
+
+
+def _fetch_readme_batch(repos: list[str]) -> dict[str, str]:
+    """Fetch READMEs for a batch, returning {full_name: readme_text}."""
+    query = _build_batch_query(repos, README_FRAGMENT)
+    try:
+        result = _graphql_query(query)
+    except RuntimeError:
+        if len(repos) <= 5:
+            raise
+        half = len(repos) // 2
+        print(f"\n  README batch failed, splitting into two sub-batches of {half}")
+        left = _fetch_readme_batch(repos[:half])
+        right = _fetch_readme_batch(repos[half:])
+        left.update(right)
+        return left
+
+    data = result.get("data") or {}
+    readmes = {}
+    for i in range(len(repos)):
+        node = data.get(f"repo{i}")
+        if node is None:
+            continue
+        readmes[node["nameWithOwner"]] = _extract_readme(node)
+    return readmes
+
+
+def _fetch_concurrent(items, batch_size, fetch_fn, desc, combine_fn):
+    """Generic concurrent batch fetcher with checkpointing."""
+    batches = []
+    for i in range(0, len(items), batch_size):
+        batches.append(items[i : i + batch_size])
+
+    results = []
+    lock = threading.Lock()
+
+    with tqdm(total=len(items), desc=desc) as pbar:
+        with ThreadPoolExecutor(max_workers=CONCURRENT_REQUESTS) as executor:
+            futures = {
+                executor.submit(fetch_fn, batch): batch
+                for batch in batches
+            }
+            for future in as_completed(futures):
+                batch = futures[future]
+                try:
+                    result = future.result()
+                except Exception as e:
+                    print(f"\n  Batch failed permanently: {e}")
+                    result = combine_fn()  # empty result
+                with lock:
+                    results.append(result)
+                    pbar.update(len(batch))
+
+    return results
 
 
 def main():
-    # Resume support: load existing progress
-    existing_rows = {}  # full_name -> row dict
-    needs_refresh = False
-    if REPOS_PARQUET.exists():
-        df_existing = pd.read_parquet(REPOS_PARQUET)
-        # Detect if old data is missing new columns (needs full refresh)
-        missing_cols = [c for c in _NEW_COLUMN_DEFAULTS if c not in df_existing.columns]
-        if missing_cols:
-            needs_refresh = True
-            print(f"Old data missing columns: {missing_cols} — will refresh all repos")
+    candidates = _load_candidates()
+
+    # Resume: load existing metadata (full candidate pool, not just top N)
+    existing_rows = {}
+    if METADATA_PARQUET.exists():
+        df_existing = pd.read_parquet(METADATA_PARQUET)
         for row in df_existing.to_dict("records"):
             existing_rows[row["full_name"]] = row
-        print(f"Resuming: {len(existing_rows)} repos already fetched")
-    else:
-        needs_refresh = True  # no data at all
+        print(f"Resuming: {len(existing_rows)} repos in metadata cache")
+    elif REPOS_PARQUET.exists():
+        # Migrate from old layout where repos.parquet held everything
+        df_existing = pd.read_parquet(REPOS_PARQUET)
+        for row in df_existing.to_dict("records"):
+            existing_rows[row["full_name"]] = row
+        print(f"Migrated {len(existing_rows)} repos from {REPOS_PARQUET}")
 
-    if needs_refresh or len(existing_rows) < TARGET_REPO_COUNT:
-        repo_list = fetch_repo_list()
-        print(f"Found {len(repo_list)} repos from search")
+    # --- Pass 1: Metadata (no READMEs) for all candidates ---
+    need_metadata = [c for c in candidates if c not in existing_rows]
+    print(f"Pass 1 — metadata: {len(need_metadata)} candidates to fetch")
 
-        # Merge: fresh GraphQL data takes priority, preserve extra columns (e.g. summary)
-        new_rows = {}
-        for r in repo_list:
-            name = r["full_name"]
-            # Carry over extra columns from old data (like 'summary')
-            if name in existing_rows:
-                for col, val in existing_rows[name].items():
-                    if col not in r:
-                        r[col] = val
-            new_rows[name] = r
-        # Drop old rows not in the fresh fetch (they've fallen out of the top N)
-        dropped = len(existing_rows) - sum(1 for n in existing_rows if n in new_rows)
-        if dropped:
-            print(f"Dropped {dropped} repos no longer in top {TARGET_REPO_COUNT}")
-        rows = list(new_rows.values())
-        print(f"Total repos: {len(rows)}")
-    else:
-        rows = list(existing_rows.values())
-        print("All repos already fetched, nothing to do")
+    if need_metadata:
+        batch_results = _fetch_concurrent(
+            need_metadata, METADATA_BATCH_SIZE, _fetch_metadata_batch,
+            "Fetching metadata", list,
+        )
+        for batch_rows in batch_results:
+            for r in batch_rows:
+                name = r["full_name"]
+                if name in existing_rows:
+                    for col, val in existing_rows[name].items():
+                        if col not in r:
+                            r[col] = val
+                existing_rows[name] = r
 
-    df = pd.DataFrame(rows)
+    # Save full metadata cache (preserves all candidates for re-selection)
+    df_meta = pd.DataFrame(list(existing_rows.values()))
+    df_meta.to_parquet(METADATA_PARQUET, index=False)
+    print(f"Pass 1 complete: {len(existing_rows)} total repos in metadata cache")
+
+    # --- Sort all repos by stars ---
+    all_rows = sorted(
+        existing_rows.values(),
+        key=lambda r: r.get("stargazers_count", 0),
+        reverse=True,
+    )
+
+    # --- Pass 2: Fetch READMEs for an expanded pool ---
+    # We need TARGET_REPO_COUNT repos with non-empty READMEs. Overshoot by
+    # 20% to account for repos without READMEs, then expand further if needed.
+    pool_size = min(int(TARGET_REPO_COUNT * 1.2), len(all_rows))
+    pool = all_rows[:pool_size]
+
+    need_readme = [r["full_name"] for r in pool if not r.get("readme")]
+    print(f"Pass 2 — READMEs: {len(need_readme)} repos need READMEs (pool: {pool_size})")
+
+    if need_readme:
+        batch_results = _fetch_concurrent(
+            need_readme, GRAPHQL_BATCH_SIZE, _fetch_readme_batch,
+            "Fetching READMEs", dict,
+        )
+        for readme_map in batch_results:
+            for name, text in readme_map.items():
+                if name in existing_rows:
+                    existing_rows[name]["readme"] = text
+
+        # Update metadata cache with READMEs
+        df_meta = pd.DataFrame(list(existing_rows.values()))
+        df_meta.to_parquet(METADATA_PARQUET, index=False)
+
+    # --- Final selection: top N repos with usable READMEs ---
+    # Filter out empty and very short READMEs (< 200 chars) so downstream
+    # scripts don't need to drop repos and reduce the count below target.
+    MIN_README_CHARS = 200
+    final_rows = []
+    for r in all_rows:
+        r.setdefault("readme", "")
+        if len(r["readme"].strip()) >= MIN_README_CHARS:
+            final_rows.append(r)
+            if len(final_rows) >= TARGET_REPO_COUNT:
+                break
+
+    if len(final_rows) < TARGET_REPO_COUNT:
+        print(f"Warning: only {len(final_rows)} repos have non-empty READMEs")
+
+    min_stars = final_rows[-1].get("stargazers_count", 0) if final_rows else 0
+    print(f"Selected {len(final_rows)} repos with READMEs (min stars: {min_stars})")
+
+    df = pd.DataFrame(final_rows)
     df.to_parquet(REPOS_PARQUET, index=False)
     print(f"Done. Saved {len(df)} repos to {REPOS_PARQUET}")
-    print(f"  Non-empty READMEs: {(df['readme'].str.len() > 0).sum()}")
 
 
 if __name__ == "__main__":

@@ -12,15 +12,7 @@ def main():
     df = pd.read_parquet(REPOS_PARQUET)
     print(f"Loaded {len(df)} repos")
 
-    # Use readme text; fall back to description or placeholder
-    texts = []
-    for _, row in df.iterrows():
-        text = row["readme"].strip() if isinstance(row["readme"], str) else ""
-        if not text:
-            text = row["description"].strip() if isinstance(row["description"], str) else ""
-        if not text:
-            text = row["full_name"]
-        texts.append(text)
+    texts = [row["readme"].strip() for _, row in df.iterrows()]
 
     co = cohere.ClientV2(api_key=CO_API_KEY)
 
