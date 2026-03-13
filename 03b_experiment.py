@@ -1,9 +1,10 @@
 """UMAP parameter experiment: compare n_neighbors × min_dist combinations.
 
 Phase 1: Evaluate all 20 configs with embedding-space metrics (no API keys).
-Phase 2: Run full Toponymy + audit on top 3 by trustworthiness.
+Phase 2: Run full Toponymy + audit on a curated set of configs.
 """
 
+import argparse
 import copy
 import itertools
 import time
@@ -58,6 +59,11 @@ TOPONYMY_DEFAULTS = {
 
 SPEARMAN_SAMPLE = 2_000
 
+# ── Stability seeds ─────────────────────────────────────────────────────────
+
+STABILITY_SEEDS = [42, 123, 456, 789, 1024]
+STABILITY_K = 15
+
 
 def load_data():
     """Load shared data used across all experiments."""
@@ -96,16 +102,48 @@ def make_experiment_configs():
     return configs
 
 
-def run_umap(embeddings, config):
+def run_umap(embeddings, config, random_state=42):
     """Fit UMAP with given config, return 2D coords."""
     reducer = umap.UMAP(
         n_components=2,
         n_neighbors=config["n_neighbors"],
         min_dist=config["min_dist"],
         metric="cosine",
-        random_state=42,
+        random_state=random_state,
     )
     return reducer.fit_transform(embeddings)
+
+
+def evaluate_stability(embeddings, config):
+    """Run UMAP with multiple seeds and measure k-NN overlap between layouts.
+
+    Returns mean pairwise k-NN stability (fraction of k=STABILITY_K neighbors
+    shared between any two runs). Higher = more reproducible layout.
+    """
+    all_coords = []
+    for seed in STABILITY_SEEDS:
+        coords = run_umap(embeddings, config, random_state=seed)
+        all_coords.append(coords)
+
+    # For each layout, compute k-NN indices
+    all_indices = []
+    for coords in all_coords:
+        nn = NearestNeighbors(n_neighbors=STABILITY_K + 1, metric="euclidean")
+        nn.fit(coords)
+        _, indices = nn.kneighbors(coords)
+        all_indices.append(indices[:, 1:])  # drop self
+
+    # Pairwise k-NN overlap across all seed pairs
+    overlaps = []
+    for i, j in itertools.combinations(range(len(STABILITY_SEEDS)), 2):
+        per_point = []
+        for p in range(len(embeddings)):
+            set_i = set(all_indices[i][p])
+            set_j = set(all_indices[j][p])
+            per_point.append(len(set_i & set_j) / STABILITY_K)
+        overlaps.append(np.mean(per_point))
+
+    return np.mean(overlaps)
 
 
 def precompute_hd_neighbors(embeddings):
@@ -322,48 +360,67 @@ def format_name(name):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="UMAP parameter experiment")
+    parser.add_argument("--phase1-only", action="store_true",
+                        help="Run Phase 1 only (no Toponymy, no API keys needed)")
+    args = parser.parse_args()
+
     df, embeddings, documents = load_data()
     print(f"Loaded {len(documents)} documents, embeddings shape {embeddings.shape}")
 
     configs = make_experiment_configs()
-    print(f"\nPhase 1: evaluating {len(configs)} UMAP configs")
 
-    # Pre-compute HD neighbors
-    precomputed = precompute_hd_neighbors(embeddings)
+    # ── Phase 1 (skip if results already exist) ─────────────────────────────
+    phase1_csv = EXPERIMENTS_DIR / "umap_phase1.csv"
+    if phase1_csv.exists():
+        print(f"\nPhase 1 results already exist at {phase1_csv}, skipping.")
+        phase1_df = pd.read_csv(phase1_csv)
+    else:
+        print(f"\nPhase 1: evaluating {len(configs)} UMAP configs")
 
-    # ── Phase 1 ──────────────────────────────────────────────────────────────
-    phase1_rows = []
-    for cfg in configs:
-        name = cfg["name"]
-        print(f"\n  Running UMAP: {name} (n_neighbors={cfg['n_neighbors']}, min_dist={cfg['min_dist']})")
+        # Pre-compute HD neighbors
+        precomputed = precompute_hd_neighbors(embeddings)
 
-        t0 = time.time()
-        coords = run_umap(embeddings, cfg)
-        umap_time = time.time() - t0
-        print(f"    UMAP fit: {umap_time:.1f}s")
+        phase1_rows = []
+        for cfg in configs:
+            name = cfg["name"]
+            print(f"\n  Running UMAP: {name} (n_neighbors={cfg['n_neighbors']}, min_dist={cfg['min_dist']})")
 
-        # Save coords
-        exp_dir = EXPERIMENTS_DIR / f"umap_{name}"
-        exp_dir.mkdir(exist_ok=True)
-        np.savez(exp_dir / "umap_coords.npz", coords=coords)
+            t0 = time.time()
+            coords = run_umap(embeddings, cfg)
+            umap_time = time.time() - t0
+            print(f"    UMAP fit: {umap_time:.1f}s")
 
-        # Evaluate
-        metrics = evaluate_phase1(embeddings, coords, precomputed)
-        print(f"    trust={metrics['trustworthiness_k15']:.4f}  "
-              f"knn10={metrics['knn_recall_k10']:.4f}  "
-              f"knn50={metrics['knn_recall_k50']:.4f}  "
-              f"spearman={metrics['spearman_rho']:.4f}")
+            # Save coords
+            exp_dir = EXPERIMENTS_DIR / f"umap_{name}"
+            exp_dir.mkdir(exist_ok=True)
+            np.savez(exp_dir / "umap_coords.npz", coords=coords)
 
-        phase1_rows.append({
-            "name": name,
-            "n_neighbors": cfg["n_neighbors"],
-            "min_dist": cfg["min_dist"],
-            **metrics,
-            "umap_time_s": round(umap_time, 1),
-        })
+            # Evaluate
+            metrics = evaluate_phase1(embeddings, coords, precomputed)
 
-    phase1_df = pd.DataFrame(phase1_rows).sort_values("trustworthiness_k15", ascending=False)
-    phase1_df.to_csv(EXPERIMENTS_DIR / "umap_phase1.csv", index=False)
+            # Stability across random seeds
+            print(f"    Measuring stability ({len(STABILITY_SEEDS)} seeds)...")
+            t1 = time.time()
+            stability = evaluate_stability(embeddings, cfg)
+            stability_time = time.time() - t1
+            metrics["knn_stability_k15"] = stability
+            print(f"    trust={metrics['trustworthiness_k15']:.4f}  "
+                  f"knn10={metrics['knn_recall_k10']:.4f}  "
+                  f"knn50={metrics['knn_recall_k50']:.4f}  "
+                  f"spearman={metrics['spearman_rho']:.4f}  "
+                  f"stability={stability:.4f} ({stability_time:.1f}s)")
+
+            phase1_rows.append({
+                "name": name,
+                "n_neighbors": cfg["n_neighbors"],
+                "min_dist": cfg["min_dist"],
+                **metrics,
+                "umap_time_s": round(umap_time, 1),
+            })
+
+        phase1_df = pd.DataFrame(phase1_rows).sort_values("trustworthiness_k15", ascending=False)
+        phase1_df.to_csv(phase1_csv, index=False)
 
     # Print ranked table
     print(f"\n{'='*60}")
@@ -373,16 +430,38 @@ def main():
     display["name"] = display["name"].apply(format_name)
     print(display.to_string(index=False, float_format="%.4f"))
 
-    # ── Phase 2: top 3 by trustworthiness ────────────────────────────────────
-    top3 = phase1_df.head(3)
-    top3_names = top3["name"].tolist()
+    if args.phase1_only:
+        print("\n--phase1-only: stopping after Phase 1.")
+        return
+
+    # ── Phase 2: curated config selection ────────────────────────────────────
+    # We deliberately hand-pick configs rather than auto-selecting top-N by a
+    # single metric. Phase 1 showed that trustworthiness and Spearman rho are
+    # inversely correlated (local vs global structure tradeoff), and that
+    # min_dist=0.0 dominates all local-fidelity metrics by construction (it
+    # allows UMAP to pack true neighbors as tightly as possible). Auto-selecting
+    # by trustworthiness alone would send only low-n_neighbors, low-min_dist
+    # configs to Phase 2, giving no diversity.
+    #
+    # Selected configs and rationale:
+    #   nn5_md0.00  — best trustworthiness overall (0.9298), represents the
+    #                 tight-local-neighborhoods extreme
+    #   nn15_md0.05 — current production baseline, good middle ground across
+    #                 all metrics (trust=0.9101, spearman=0.2573)
+    #   nn50_md0.00 — best Spearman (0.2731) among configs with trust > 0.89,
+    #                 tests whether better global structure improves topic labels
+    #   nn15_md0.25 — highest min_dist at n_neighbors=15, forces points apart
+    #                 which may give Toponymy's HDBSCAN clusterer cleaner
+    #                 boundaries despite weaker embedding-space metrics
+    phase2_names = ["nn5_md0.00", "nn15_md0.05", "nn50_md0.00", "nn15_md0.25"]
+    phase2_configs = phase1_df[phase1_df["name"].isin(phase2_names)]
     print(f"\n{'='*60}")
-    print(f"Phase 2: running Toponymy on top 3: {', '.join(top3_names)}")
+    print(f"Phase 2: running Toponymy on {len(phase2_names)} configs: {', '.join(phase2_names)}")
     print(f"{'='*60}")
 
     models = {}
     phase2_rows = []
-    for _, p1_row in top3.iterrows():
+    for _, p1_row in phase2_configs.iterrows():
         name = p1_row["name"]
         exp_dir = EXPERIMENTS_DIR / f"umap_{name}"
         coords = np.load(exp_dir / "umap_coords.npz")["coords"]
