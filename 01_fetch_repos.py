@@ -22,11 +22,11 @@ from tqdm import tqdm
 from config import (
     CANDIDATES_COMMITTED,
     CANDIDATES_CSV,
+    FETCH_OVERSHOOT_COUNT,
     GITHUB_TOKEN,
     GRAPHQL_BATCH_SIZE,
     METADATA_PARQUET,
     REPOS_PARQUET,
-    TARGET_REPO_COUNT,
 )
 
 CONCURRENT_REQUESTS = 5
@@ -350,9 +350,9 @@ def main():
     )
 
     # --- Pass 2: Fetch READMEs for an expanded pool ---
-    # We need TARGET_REPO_COUNT repos with non-empty READMEs. Overshoot by
+    # We need FETCH_OVERSHOOT_COUNT repos with non-empty READMEs. Overshoot by
     # 20% to account for repos without READMEs, then expand further if needed.
-    pool_size = min(int(TARGET_REPO_COUNT * 1.2), len(all_rows))
+    pool_size = min(int(FETCH_OVERSHOOT_COUNT * 1.2), len(all_rows))
     pool = all_rows[:pool_size]
 
     need_readme = [r["full_name"] for r in pool if not r.get("readme")]
@@ -381,10 +381,10 @@ def main():
         r.setdefault("readme", "")
         if len(r["readme"].strip()) >= MIN_README_CHARS:
             final_rows.append(r)
-            if len(final_rows) >= TARGET_REPO_COUNT:
+            if len(final_rows) >= FETCH_OVERSHOOT_COUNT:
                 break
 
-    if len(final_rows) < TARGET_REPO_COUNT:
+    if len(final_rows) < FETCH_OVERSHOOT_COUNT:
         print(f"Warning: only {len(final_rows)} repos have non-empty READMEs")
 
     min_stars = final_rows[-1].get("stargazers_count", 0) if final_rows else 0
