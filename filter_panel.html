@@ -1,0 +1,693 @@
+<!-- SECTION: css -->
+<style>
+/* Prevent expanded filters from inflating the top-left grid row, which
+   pushes the colormap off-screen. Filter content overflows visually;
+   the colormap (z-index:100) renders on top when they overlap. */
+.stack.top-left {
+  min-height: 0;
+}
+#filter-container {
+  width: auto;
+  max-width: calc(100vw - 48px);
+}
+#filter-container.open {
+  width: 340px;
+}
+#filter-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-family: 'Roboto', system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+  user-select: none;
+  line-height: 1.4;
+}
+#filter-header:hover { color: #1a73e8; }
+#filter-toggle-icon {
+  font-size: 11px;
+  transition: transform 0.2s;
+}
+#filter-body {
+  display: none;
+  margin-top: 10px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+#filter-body.open { display: block; }
+#filter-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+#filter-match-count {
+  font-family: 'Roboto', system-ui, sans-serif;
+  font-size: 12px;
+  color: #666;
+  line-height: 1.4;
+}
+#filter-reset-inline {
+  font-family: 'Roboto', system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  color: #1a73e8;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+#filter-reset-inline:hover {
+  text-decoration: underline;
+}
+.filter-group {
+  margin-bottom: 4px;
+}
+.filter-group-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-family: 'Roboto', system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  color: #444;
+  margin-bottom: 0;
+  line-height: 1.4;
+}
+.filter-range-value {
+  font-weight: 400;
+  font-size: 11px;
+  color: #666;
+}
+.filter-range-wrapper {
+  position: relative;
+  height: 24px;
+  margin: 2px 0;
+}
+.filter-range-track {
+  position: absolute;
+  top: 10px;
+  left: 0;
+  right: 0;
+  height: 4px;
+  border-radius: 2px;
+  background: #ddd;
+  pointer-events: none;
+}
+.filter-range-fill {
+  position: absolute;
+  top: 10px;
+  height: 4px;
+  border-radius: 2px;
+  background: #1a73e8;
+  pointer-events: none;
+}
+.filter-range-wrapper input[type="range"] {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  pointer-events: none;
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+}
+.filter-range-wrapper input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #1a73e8;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  cursor: pointer;
+  pointer-events: auto;
+}
+.filter-range-wrapper input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #1a73e8;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  cursor: pointer;
+  pointer-events: auto;
+}
+.filter-checkbox-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 8px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+.filter-checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  font-family: 'Roboto', system-ui, sans-serif;
+  font-size: 12px;
+  color: #444;
+  cursor: pointer;
+  line-height: 1.4;
+}
+.filter-checkbox-item input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+  width: auto;
+  height: auto;
+}
+.filter-section-divider {
+  font-family: 'Roboto', system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 6px 0 4px;
+  border-top: 1px solid #e0e0e0;
+  padding-top: 4px;
+}
+.filter-toggle-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+.filter-toggle-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Roboto', system-ui, sans-serif;
+  font-size: 12px;
+  color: #444;
+  line-height: 1.4;
+}
+.filter-toggle-switch {
+  position: relative;
+  width: 34px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.filter-toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.filter-toggle-switch .slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: #ccc;
+  border-radius: 9px;
+  transition: background 0.2s;
+}
+.filter-toggle-switch .slider::before {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  left: 2px;
+  bottom: 2px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+.filter-toggle-switch input:checked + .slider {
+  background: #1a73e8;
+}
+.filter-toggle-switch input:checked + .slider::before {
+  transform: translateX(16px);
+}
+</style>
+
+<!-- SECTION: html -->
+<div id="filter-container" class="container-box">
+  <div id="filter-header">
+    <span>Advanced Filters</span>
+    <span id="filter-toggle-icon">&#9656;</span>
+  </div>
+  <div id="filter-body">
+    <div id="filter-status-row">
+      <div id="filter-match-count"></div>
+      <button id="filter-reset-inline" type="button">Reset</button>
+    </div>
+    <div id="filter-controls"></div>
+    <div class="filter-section-divider">Display</div>
+    <div class="filter-toggle-row">
+      <div class="filter-toggle-item">
+        <label class="filter-toggle-switch">
+          <input type="checkbox" id="label-toggle" checked>
+          <span class="slider"></span>
+        </label>
+        <label for="label-toggle">Labels</label>
+      </div>
+      <div class="filter-toggle-item">
+        <label class="filter-toggle-switch">
+          <input type="checkbox" id="boundary-toggle">
+          <span class="slider"></span>
+        </label>
+        <label for="boundary-toggle">Boundaries</label>
+      </div>
+      <div class="filter-toggle-item">
+        <label class="filter-toggle-switch">
+          <input type="checkbox" id="edge-graph-toggle">
+          <span class="slider"></span>
+        </label>
+        <label for="edge-graph-toggle">Edge Graph</label>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION: js -->
+<script>
+(function() {
+  const FILTER_CONFIG = __FILTER_CONFIG_JSON__;
+
+  class FilterPanel {
+    constructor(datamap, hoverData, config) {
+      this.datamap = datamap;
+      this.hoverData = hoverData;
+      this.config = config;
+      this.filters = {};
+      this.totalCount = config.totalCount;
+
+      this.container = document.getElementById('filter-controls');
+      this.matchCountEl = document.getElementById('filter-match-count');
+
+      this.initRangeFilter('stars', 'filter-stars', {
+        label: 'Star Count',
+        field: 'stars',
+        min: config.ranges.stars.min,
+        max: config.ranges.stars.max,
+        sliderMax: config.ranges.stars.sliderMax,
+        step: 1,
+        capLabel: true,
+      });
+
+      this.initRangeFilter('created_year', 'filter-created-year', {
+        label: 'Created Date',
+        field: 'created_year',
+        min: config.ranges.created_year.min,
+        max: config.ranges.created_year.max,
+        sliderMax: config.ranges.created_year.max,
+        step: 1,
+        integerLabels: true,
+      });
+
+      this.initRangeFilter('days_since_push', 'filter-days-since-push', {
+        label: 'Last Push (days ago)',
+        field: 'days_since_push',
+        min: config.ranges.days_since_push.min,
+        max: config.ranges.days_since_push.max,
+        sliderMax: config.ranges.days_since_push.sliderMax,
+        step: 1,
+        capLabel: true,
+      });
+
+      this.initRangeFilter('forks', 'filter-forks', {
+        label: 'Fork Count',
+        field: 'forks',
+        min: config.ranges.forks.min,
+        max: config.ranges.forks.max,
+        sliderMax: config.ranges.forks.sliderMax,
+        step: 1,
+        capLabel: true,
+      });
+
+      this.initRangeFilter('open_issues', 'filter-open-issues', {
+        label: 'Open Issues',
+        field: 'open_issues',
+        min: config.ranges.open_issues.min,
+        max: config.ranges.open_issues.max,
+        sliderMax: config.ranges.open_issues.sliderMax,
+        step: 1,
+        capLabel: true,
+      });
+
+      this.initCheckboxFilter('language', 'filter-language', {
+        label: 'Primary Language',
+        field: 'primary_language',
+        values: config.languages,
+      });
+
+      // Toggle panel
+      const header = document.getElementById('filter-header');
+      const body = document.getElementById('filter-body');
+      const icon = document.getElementById('filter-toggle-icon');
+      header.addEventListener('click', () => {
+        body.classList.toggle('open');
+        document.getElementById('filter-container').classList.toggle('open');
+        icon.innerHTML = body.classList.contains('open') ? '&#9662;' : '&#9656;';
+        if (body.classList.contains('open')) {
+          this.updateFilterBodyHeight();
+        }
+      });
+
+      // Recalculate on resize
+      window.addEventListener('resize', () => {
+        if (body.classList.contains('open')) this.updateFilterBodyHeight();
+      });
+
+      // Reset button
+      document.getElementById('filter-reset-inline').addEventListener('click', () => this.resetAll());
+
+      this.updateMatchCount();
+    }
+
+    initRangeFilter(name, filterId, opts) {
+      const { label, field, min, max, sliderMax, step, integerLabels, capLabel, decimals } = opts;
+      const group = document.createElement('div');
+      group.className = 'filter-group';
+      const maxInitLabel = capLabel && sliderMax < max ? sliderMax + '+' : sliderMax;
+      group.innerHTML = `
+        <div class="filter-group-label">
+          <span>${label}</span>
+          <span class="filter-range-value" id="${filterId}-value">${min} – ${maxInitLabel}</span>
+        </div>
+        <div class="filter-range-wrapper">
+          <div class="filter-range-track"></div>
+          <div class="filter-range-fill" id="${filterId}-fill"></div>
+          <input type="range" id="${filterId}-min" min="${min}" max="${sliderMax}" value="${min}" step="${step}">
+          <input type="range" id="${filterId}-max" min="${min}" max="${sliderMax}" value="${sliderMax}" step="${step}">
+        </div>
+      `;
+      this.container.appendChild(group);
+
+      const minInput = document.getElementById(`${filterId}-min`);
+      const maxInput = document.getElementById(`${filterId}-max`);
+      const fill = document.getElementById(`${filterId}-fill`);
+      const valueLabel = document.getElementById(`${filterId}-value`);
+
+      // Pre-parse the numeric data from hoverData for this field
+      const values = this.hoverData[field].map(Number);
+
+      const state = { minVal: min, maxVal: sliderMax };
+      this.filters[filterId] = { type: 'range', state, minInput, maxInput, min, sliderMax, max, field, values };
+
+      const updateFill = () => {
+        const range = sliderMax - min;
+        const leftPct = range === 0 ? 0 : ((state.minVal - min) / range) * 100;
+        const rightPct = range === 0 ? 100 : ((state.maxVal - min) / range) * 100;
+        fill.style.left = leftPct + '%';
+        fill.style.width = (rightPct - leftPct) + '%';
+      };
+
+      const onInput = () => {
+        let lo = decimals != null ? parseFloat(minInput.value) : parseInt(minInput.value);
+        let hi = decimals != null ? parseFloat(maxInput.value) : parseInt(maxInput.value);
+        if (lo > hi) { [lo, hi] = [hi, lo]; }
+        state.minVal = lo;
+        state.maxVal = hi;
+
+        const fmt = decimals != null ? (v) => v.toFixed(decimals) : (v) => String(v);
+        const hiText = (hi >= sliderMax && capLabel && sliderMax < max) ? fmt(hi) + '+' : fmt(hi);
+        valueLabel.textContent = `${fmt(lo)} – ${hiText}`;
+
+        updateFill();
+        this.applyRangeFilter(filterId);
+      };
+
+      minInput.addEventListener('input', onInput);
+      maxInput.addEventListener('input', onInput);
+      updateFill();
+    }
+
+    applyRangeFilter(filterId) {
+      const f = this.filters[filterId];
+      const { state, min, sliderMax, max, values } = f;
+      const isFullRange = state.minVal <= min && state.maxVal >= sliderMax;
+
+      if (isFullRange) {
+        this.datamap.removeSelection(filterId);
+      } else {
+        // When max handle is at slider cap, include all values above
+        const effectiveMax = state.maxVal >= sliderMax ? max : state.maxVal;
+        const indices = [];
+        for (let i = 0; i < values.length; i++) {
+          if (values[i] >= state.minVal && values[i] <= effectiveMax) {
+            indices.push(i);
+          }
+        }
+        this.datamap.addSelection(indices, filterId);
+      }
+      this.updateMatchCount();
+    }
+
+    initCheckboxFilter(name, filterId, opts) {
+      const { label, field, values } = opts;
+      const group = document.createElement('div');
+      group.className = 'filter-group';
+
+      let html = `<div class="filter-group-label">${label}</div><div class="filter-checkbox-list">`;
+      for (const val of values) {
+        const id = `${filterId}-${val.replace(/\s+/g, '-')}`;
+        html += `<label class="filter-checkbox-item"><input type="checkbox" id="${id}" value="${val}" checked> ${val}</label>`;
+      }
+      html += '</div>';
+      group.innerHTML = html;
+      this.container.appendChild(group);
+
+      const checkboxes = group.querySelectorAll('input[type="checkbox"]');
+      const fieldValues = this.hoverData[field];
+
+      this.filters[filterId] = { type: 'checkbox', checkboxes, fieldValues, values };
+
+      const onChange = () => {
+        const checked = new Set();
+        checkboxes.forEach(cb => { if (cb.checked) checked.add(cb.value); });
+        const allChecked = checked.size === values.length;
+
+        if (allChecked) {
+          this.datamap.removeSelection(filterId);
+        } else {
+          const indices = [];
+          for (let i = 0; i < fieldValues.length; i++) {
+            if (checked.has(fieldValues[i])) {
+              indices.push(i);
+            }
+          }
+          this.datamap.addSelection(indices, filterId);
+        }
+        this.updateMatchCount();
+      };
+
+      checkboxes.forEach(cb => cb.addEventListener('change', onChange));
+    }
+
+    updateFilterBodyHeight() {
+      const body = document.getElementById('filter-body');
+      const colormap = document.getElementById('colormap-selector-container');
+      if (!colormap) return;
+      const bodyTop = body.getBoundingClientRect().top;
+      const colormapTop = colormap.getBoundingClientRect().top;
+      const available = colormapTop - bodyTop - 20; // 20px buffer
+      if (available > 0) body.style.maxHeight = available + 'px';
+    }
+
+    updateMatchCount() {
+      const mgr = this.datamap.dataSelectionManager;
+      const hasSelections = Object.keys(mgr.selectedIndicesByItem).length > 0;
+      if (hasSelections) {
+        const selected = mgr.getSelectedIndices();
+        this.matchCountEl.textContent = `${selected.size.toLocaleString()} of ${this.totalCount.toLocaleString()} repos`;
+      } else {
+        this.matchCountEl.textContent = `${this.totalCount.toLocaleString()} of ${this.totalCount.toLocaleString()} repos`;
+      }
+    }
+
+    resetAll() {
+      for (const [filterId, f] of Object.entries(this.filters)) {
+        if (f.type === 'range') {
+          f.minInput.value = f.min;
+          f.maxInput.value = f.sliderMax;
+          f.state.minVal = f.min;
+          f.state.maxVal = f.sliderMax;
+          // Trigger visual update
+          f.minInput.dispatchEvent(new Event('input'));
+        } else if (f.type === 'checkbox') {
+          f.checkboxes.forEach(cb => { cb.checked = true; });
+        }
+        this.datamap.removeSelection(filterId);
+      }
+      this.updateMatchCount();
+
+      // Reset display toggles to defaults
+      const labelToggle = document.getElementById('label-toggle');
+      const boundaryToggle = document.getElementById('boundary-toggle');
+      const edgeGraphToggle = document.getElementById('edge-graph-toggle');
+      if (labelToggle.checked !== true) {
+        labelToggle.checked = true;
+        labelToggle.dispatchEvent(new Event('change'));
+      }
+      if (boundaryToggle.checked !== false) {
+        boundaryToggle.checked = false;
+        boundaryToggle.dispatchEvent(new Event('change'));
+      }
+      if (edgeGraphToggle.checked !== false) {
+        edgeGraphToggle.checked = false;
+        edgeGraphToggle.dispatchEvent(new Event('change'));
+      }
+    }
+  }
+
+  // Monkey-patch highlightPoints to preserve original point radius settings.
+  function patchHighlightPoints(datamap) {
+    var origHighlight = datamap.highlightPoints.bind(datamap);
+    datamap.highlightPoints = function(itemId) {
+      var currentLayer = datamap.pointLayer;
+      var realClone = currentLayer.clone.bind(currentLayer);
+      currentLayer.clone = function(overrides) {
+        overrides.radiusMinPixels = datamap.pointRadiusMinPixels;
+        overrides.radiusMaxPixels = datamap.pointRadiusMaxPixels;
+        return realClone(overrides);
+      };
+      origHighlight(itemId);
+      currentLayer.clone = realClone;
+      if (datamap._pointLabels) {
+        var mgr = datamap.dataSelectionManager;
+        var hasSelections = Object.keys(mgr.selectedIndicesByItem).length > 0;
+        datamap._pointLabels.updateVisibility(
+          hasSelections ? mgr.getSelectedIndices() : null
+        );
+      }
+    };
+  }
+
+  // Toggle cluster label visibility.
+  function setupLabelToggle(datamap) {
+    const toggle = document.getElementById('label-toggle');
+    let labelData = null;
+
+    function setLabelVisible(visible) {
+      if (!datamap.labelLayer) return;
+      if (!labelData) labelData = datamap.labelLayer.props.data;
+      const idx = datamap.layers.indexOf(datamap.labelLayer);
+      if (idx === -1) return;
+      const replacement = new deck.TextLayer({
+        id: 'labelLayer',
+        data: labelData,
+        pickable: datamap.labelLayer.props.pickable,
+        getPosition: d => [d.x, d.y],
+        getText: d => d.label,
+        getColor: datamap.labelTextColor,
+        getSize: d => d.size,
+        sizeScale: 1,
+        sizeMinPixels: datamap.textMinPixelSize,
+        sizeMaxPixels: datamap.textMaxPixelSize,
+        outlineWidth: datamap.textOutlineWidth,
+        outlineColor: datamap.textOutlineColor,
+        getBackgroundColor: datamap.textBackgroundColor,
+        getBackgroundPadding: [15, 15, 15, 15],
+        background: true,
+        characterSet: 'auto',
+        fontFamily: datamap.fontFamily,
+        fontWeight: datamap.fontWeight,
+        lineHeight: 0.95,
+        fontSettings: { sdf: true },
+        getTextAnchor: 'middle',
+        getAlignmentBaseline: 'center',
+        elevation: 100,
+        collisionEnabled: true,
+        getCollisionPriority: d => d.size,
+        collisionTestProps: {
+          sizeScale: datamap.textCollisionSizeScale,
+          sizeMaxPixels: datamap.textMaxPixelSize * 2,
+          sizeMinPixels: datamap.textMinPixelSize * 2,
+        },
+        extensions: [new deck.CollisionFilterExtension()],
+        parameters: { depthTest: false },
+        visible,
+      });
+      datamap.layers[idx] = replacement;
+      datamap.labelLayer = replacement;
+      datamap.deckgl.setProps({ layers: [...datamap.layers] });
+    }
+
+    toggle.addEventListener('change', () => {
+      setLabelVisible(toggle.checked);
+      if (datamap._pointLabels) datamap._pointLabels.setEnabled(toggle.checked);
+    });
+  }
+
+  // Hide cluster boundary polygons by default; let the user toggle them on.
+  function setupBoundaryToggle(datamap) {
+    const toggle = document.getElementById('boundary-toggle');
+
+    let boundaryData = null;
+
+    function setBoundaryVisible(visible) {
+      if (!datamap.boundaryLayer) return;
+      if (!boundaryData) boundaryData = datamap.boundaryLayer.props.data;
+      const idx = datamap.layers.indexOf(datamap.boundaryLayer);
+      if (idx === -1) return;
+      const replacement = new deck.PolygonLayer({
+        id: 'boundaryLayer',
+        data: boundaryData,
+        stroked: true,
+        filled: false,
+        getLineColor: d => [d.r, d.g, d.b, d.a],
+        getPolygon: d => d.polygon,
+        lineWidthUnits: 'common',
+        getLineWidth: d => d.size * d.size,
+        lineWidthScale: datamap.clusterBoundaryLineWidth * 5e-5,
+        lineJointRounded: true,
+        lineWidthMaxPixels: 4,
+        lineWidthMinPixels: 0.0,
+        parameters: { depthTest: false },
+        visible,
+      });
+      datamap.layers[idx] = replacement;
+      datamap.boundaryLayer = replacement;
+      datamap.deckgl.setProps({ layers: [...datamap.layers] });
+    }
+
+    toggle.addEventListener('change', () => {
+      setBoundaryVisible(toggle.checked);
+    });
+  }
+
+  // Toggle edge graph (background image layer) visibility.
+  function setupEdgeGraphToggle(datamap) {
+    const toggle = document.getElementById('edge-graph-toggle');
+
+    function setEdgeGraphVisible(visible) {
+      if (!datamap.imageLayer) return;
+      const idx = datamap.layers.indexOf(datamap.imageLayer);
+      if (idx === -1) return;
+      const replacement = new deck.BitmapLayer({
+        id: 'imageLayer',
+        bounds: datamap.imageLayer.props.bounds,
+        image: datamap.imageLayer.props.image,
+        parameters: { depthTest: false },
+        visible,
+      });
+      datamap.layers[idx] = replacement;
+      datamap.imageLayer = replacement;
+      datamap.deckgl.setProps({ layers: [...datamap.layers] });
+    }
+
+    toggle.addEventListener('change', () => {
+      setEdgeGraphVisible(toggle.checked);
+    });
+  }
+
+  // Wait for DataMapPlot to finish loading data
+  window.addEventListener('datamapReady', function(e) {
+    const { datamap, hoverData } = e.detail;
+    patchHighlightPoints(datamap);
+    setupLabelToggle(datamap);
+    setupBoundaryToggle(datamap);
+    setupEdgeGraphToggle(datamap);
+    new FilterPanel(datamap, hoverData, FILTER_CONFIG);
+  });
+})();
+</script>

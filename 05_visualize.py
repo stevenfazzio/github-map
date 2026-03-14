@@ -1,6 +1,9 @@
 """Generate interactive DataMapPlot visualization."""
 
+import json
+import re
 from datetime import datetime, timezone
+from pathlib import Path
 
 import datamapplot
 import glasbey
@@ -16,6 +19,45 @@ from config import (
     REPOS_PARQUET,
     UMAP_COORDS_NPZ,
 )
+
+FILTER_PANEL_HTML = Path(__file__).parent / "filter_panel.html"
+
+# Custom JS injected at render time: hide boundaries immediately after async
+# creation, and patch pointLayer.clone to preserve radiusMinPixels/radiusMaxPixels.
+CUSTOM_JS = """
+// Monkey-patch addBoundaries so boundaries start hidden
+(function() {
+  var origAddBoundaries = datamap.addBoundaries.bind(datamap);
+  datamap.addBoundaries = function() {
+    origAddBoundaries.apply(this, arguments);
+    // Hide the boundary layer immediately
+    if (datamap.boundaryLayer) {
+      var idx = datamap.layers.indexOf(datamap.boundaryLayer);
+      if (idx !== -1) {
+        var replacement = new deck.PolygonLayer({
+          id: 'boundaryLayer',
+          data: datamap.boundaryLayer.props.data,
+          stroked: true,
+          filled: false,
+          getLineColor: function(d) { return [d.r, d.g, d.b, d.a]; },
+          getPolygon: function(d) { return d.polygon; },
+          lineWidthUnits: 'common',
+          getLineWidth: function(d) { return d.size * d.size; },
+          lineWidthScale: datamap.clusterBoundaryLineWidth * 5e-5,
+          lineJointRounded: true,
+          lineWidthMaxPixels: 4,
+          lineWidthMinPixels: 0.0,
+          parameters: { depthTest: false },
+          visible: false,
+        });
+        datamap.layers[idx] = replacement;
+        datamap.boundaryLayer = replacement;
+        datamap.deckgl.setProps({ layers: [].concat(datamap.layers) });
+      }
+    }
+  };
+})();
+"""
 
 
 def main():
@@ -123,6 +165,10 @@ def main():
             if d else 9999
             for d in df["pushed_at"]
         ], dtype=float)
+    else:
+        days_since_push = np.zeros(len(df), dtype=float)
+
+    if "pushed_at" in df.columns:
         extra_rawdata.append(days_since_push)
         extra_metadata.append({
             "field": "last_push",
@@ -152,7 +198,25 @@ def main():
         })
 
     # ── Build the interactive plot ───────────────────────────────────────────
-    extra_data = pd.DataFrame({"full_name": df["full_name"].values})
+
+    # Extra point data for filters (all as strings for DataMapPlot serialization)
+    created_years = pd.to_datetime(df["created_at"], utc=True).dt.year.values
+    summaries = df["summary"].fillna("").values if "summary" in df.columns else [""] * len(df)
+    search_text = [
+        f"{fn} {lang or ''} {summ}"
+        for fn, lang, summ in zip(df["full_name"], df["language"].fillna(""), summaries)
+    ]
+
+    extra_data = pd.DataFrame({
+        "full_name": df["full_name"].values,
+        "stars": df["stargazers_count"].astype(str).values,
+        "created_year": created_years.astype(str),
+        "days_since_push": days_since_push.astype(int).astype(str) if "pushed_at" in df.columns else "0",
+        "forks": df["fork_count"].astype(str).values if "fork_count" in df.columns else "0",
+        "open_issues": df["open_issue_count"].astype(str).values if "open_issue_count" in df.columns else "0",
+        "primary_language": languages,
+        "search_text": search_text,
+    })
 
     all_rawdata = [languages, star_counts, licenses, license_families, created_dates] + extra_rawdata
     all_metadata = [
@@ -200,6 +264,10 @@ def main():
         title="GitHub Map",
         sub_title="Top 10,000 most-starred repositories, mapped by README similarity",
         enable_search=True,
+        search_field="search_text",
+        custom_js=CUSTOM_JS,
+        cluster_boundary_polygons=True,
+        cluster_boundary_line_width=1.0,
         darkmode=False,
     )
     fig.save(str(GITHUB_MAP_HTML))
@@ -207,6 +275,9 @@ def main():
 
     _inject_nav(GITHUB_MAP_HTML)
     print("Injected navigation bar into map")
+
+    _inject_filters(GITHUB_MAP_HTML, df, languages)
+    print("Injected filter panel into map")
 
     _write_methodology(METHODOLOGY_HTML)
     print(f"Saved methodology page to {METHODOLOGY_HTML}")
@@ -217,13 +288,107 @@ def main():
     print(f"Saved docs/ copies for GitHub Pages")
 
 
+# ── Filter panel injection ───────────────────────────────────────────────────
+
+
+def _inject_filters(html_path, df, languages):
+    """Inject the advanced filter panel into DataMapPlot-generated HTML."""
+    now = datetime.now(tz=timezone.utc)
+
+    html = Path(html_path).read_text()
+
+    # 1. Dispatch datamapReady event after metadata finishes loading
+    html = html.replace(
+        "updateProgressBar('meta-data-progress', 100);\n      checkAllDataLoaded();",
+        "updateProgressBar('meta-data-progress', 100);\n"
+        "      window.dispatchEvent(new CustomEvent('datamapReady', "
+        "{ detail: { datamap, hoverData } }));\n"
+        "      checkAllDataLoaded();",
+        1,
+    )
+
+    # 2. CSS fixes for content-wrapper (runs after _inject_nav, no conflicts)
+    html = html.replace(
+        "height:100%;z-index:1;padding:0",
+        "height:100vh;z-index:1;box-sizing:border-box;padding:0",
+        1,
+    )
+    html = html.replace(
+        "grid-template-rows:1fr 1fr",
+        "grid-template-rows:minmax(0,1fr) minmax(0,1fr)",
+        1,
+    )
+
+    # 3. Compute filter config
+    stars = df["stargazers_count"].values.astype(int)
+    created_years = pd.to_datetime(df["created_at"], utc=True).dt.year.values.astype(int)
+
+    if "pushed_at" in df.columns:
+        days = np.array([
+            (now - pd.to_datetime(d, utc=True).to_pydatetime()).days
+            if d else 9999
+            for d in df["pushed_at"]
+        ], dtype=int)
+    else:
+        days = np.zeros(len(df), dtype=int)
+
+    forks = df["fork_count"].values.astype(int) if "fork_count" in df.columns else np.zeros(len(df), dtype=int)
+    issues = df["open_issue_count"].values.astype(int) if "open_issue_count" in df.columns else np.zeros(len(df), dtype=int)
+
+    def p99_cap(arr):
+        return int(np.percentile(arr, 99))
+
+    # Build sorted language list: top 9 + Other (matching the colormap logic)
+    unique_langs = sorted(set(languages))
+    sorted_language_list = [l for l in unique_langs if l != "Other"] + ["Other"]
+
+    filter_config = {
+        "totalCount": len(df),
+        "ranges": {
+            "stars": {"min": int(stars.min()), "max": int(stars.max()), "sliderMax": p99_cap(stars)},
+            "created_year": {"min": int(created_years.min()), "max": int(created_years.max()), "sliderMax": int(created_years.max())},
+            "days_since_push": {"min": 0, "max": int(days.max()), "sliderMax": p99_cap(days)},
+            "forks": {"min": 0, "max": int(forks.max()), "sliderMax": p99_cap(forks)},
+            "open_issues": {"min": 0, "max": int(issues.max()), "sliderMax": p99_cap(issues)},
+        },
+        "languages": sorted_language_list,
+    }
+
+    # 4. Read and split template by <!-- SECTION: xxx --> markers
+    template = FILTER_PANEL_HTML.read_text()
+    sections = re.split(r"<!-- SECTION: (\w+) -->", template)
+    # sections = ['', 'css', '<css content>', 'html', '<html content>', 'js', '<js content>']
+    section_map = {}
+    for i in range(1, len(sections), 2):
+        section_map[sections[i]] = sections[i + 1].strip()
+
+    # 5. Replace config placeholder in JS section
+    js_section = section_map["js"].replace("__FILTER_CONFIG_JSON__", json.dumps(filter_config))
+
+    # 6. Inject CSS before </head>
+    html = html.replace("</head>", section_map["css"] + "\n</head>", 1)
+
+    # 7. Inject HTML after search-container div
+    search_pattern = re.compile(
+        r'(<div id="search-container" class="container-box[^"]*">\s*'
+        r'<input[^/]*/>\s*</div>)'
+    )
+    match = search_pattern.search(html)
+    if match:
+        insert_pos = match.end()
+        html = html[:insert_pos] + "\n      " + section_map["html"] + "\n" + html[insert_pos:]
+
+    # 8. Inject JS before </html>
+    html = html.replace("</html>", js_section + "\n</html>", 1)
+
+    Path(html_path).write_text(html)
+
+
 # ── Nav bar injection ────────────────────────────────────────────────────────
 
 
 def _copy_for_docs(src_html_path, dest_html_path):
     """Copy HTML file to docs/, replacing github_map.html links with index.html."""
-    from pathlib import Path
-
     html = Path(src_html_path).read_text()
     html = html.replace('href="github_map.html"', 'href="index.html"')
     Path(dest_html_path).write_text(html)
@@ -231,8 +396,6 @@ def _copy_for_docs(src_html_path, dest_html_path):
 
 def _inject_nav(html_path):
     """Add site navigation bar to DataMapPlot-generated HTML."""
-    from pathlib import Path
-
     html = Path(html_path).read_text()
 
     nav_css = """<style>
@@ -287,8 +450,6 @@ def _inject_nav(html_path):
 
 def _write_methodology(output_path, map_href="github_map.html"):
     """Write standalone methodology HTML page."""
-    from pathlib import Path
-
     html = """\
 <!DOCTYPE html>
 <html lang="en">
