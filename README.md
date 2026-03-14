@@ -2,31 +2,37 @@
 
 **[View the live map](https://stevenfazzio.github.io/github-map/)**
 
-An interactive 2D map of the top 1,000 most-starred GitHub repositories, positioned by semantic similarity of their READMEs.
+An interactive 2D map of the top 10,000 most-starred GitHub repositories, positioned by semantic similarity of their READMEs.
 
-The pipeline fetches repo metadata, embeds READMEs with Cohere, reduces to 2D with PCA + UMAP, generates topic labels with Claude, and renders an interactive HTML visualization with DataMapPlot.
+The pipeline enumerates candidates via BigQuery, fetches repo metadata via GraphQL, embeds READMEs with Cohere, reduces to 2D with UMAP, generates topic labels with Claude, and renders an interactive HTML visualization with DataMapPlot.
 
 ## Pipeline
 
 Each stage is a standalone script. Run them in order:
 
 ```bash
-pip install -e .
+pip install -e .                      # Install dependencies
+pip install -e '.[bigquery]'          # (optional) for 00_enumerate_repos.py
 
-python 01_fetch_repos.py          # Fetch top 1K repos → repos.parquet
-python 01b_summarize_readmes.py   # Summarize READMEs via Claude Haiku → repos.parquet
-python 02_embed_readmes.py        # Embed READMEs via Cohere → embeddings.npz
-python 03_reduce_umap.py          # PCA 512→256, UMAP 256→2D → umap_coords.npz
-python 04_label_topics.py         # Hierarchical topic labels via Toponymy + Claude → labels.parquet
-python 05_visualize.py            # Interactive HTML map → github_map.html
+python 00_enumerate_repos.py          # BigQuery → data/candidates.csv (optional, see below)
+python 01_fetch_repos.py              # GraphQL direct lookups → repos.parquet
+python 01b_summarize_readmes.py       # Summarize READMEs via Claude Haiku → repos.parquet
+python 02_embed_readmes.py            # Embed READMEs via Cohere → embeddings.npz
+python 03_reduce_umap.py              # UMAP 512D → 2D → umap_coords.npz
+python 04_label_topics.py             # Hierarchical topic labels via Toponymy + Claude → labels.parquet
+python 05_visualize.py                # Interactive HTML map → github_map.html
 ```
+
+**Two-phase fetch approach:** Step 00 queries GH Archive on BigQuery for repos with significant recent star activity, producing a generous candidate list (~25K). Step 01 then looks up each candidate via `repository(owner:, name:)` GraphQL queries (batched 50 per request), sorts by stars, and keeps the top 10K. This avoids the Search API's 1,000-result cap and non-deterministic ordering.
+
+**Fallback for users without GCP:** A `candidates.csv` is committed to the repo root. If `data/candidates.csv` doesn't exist, `01_fetch_repos.py` copies from the committed file automatically. Most contributors can skip step 00 entirely.
 
 Data flows through `data/` (gitignored):
 
 ```
-repos.parquet → embeddings.npz → umap_coords.npz → labels.parquet
-       │                                                  │
-       └──────────────────────────────────────────────────┴→ github_map.html
+candidates.csv ──> repos.parquet ──┬──> embeddings.npz ──> umap_coords.npz ──> labels.parquet
+                                   │                                                │
+                                   └────────────────────────────────────────────────┴──> github_map.html
 ```
 
 ## Environment Variables
@@ -38,6 +44,7 @@ Set in `.env`:
 | `GITHUB_TOKEN` | `01_fetch_repos.py` | GitHub API authentication |
 | `CO_API_KEY` | `02_embed_readmes.py`, `04_label_topics.py` | Cohere embeddings |
 | `ANTHROPIC_API_KEY` | `01b_summarize_readmes.py`, `04_label_topics.py` | Claude summarization & topic naming |
+| `GCP_PROJECT` | `00_enumerate_repos.py` | (optional) Google Cloud project ID for BigQuery |
 
 ## Visualization Features
 
@@ -47,7 +54,7 @@ The output `github_map.html` includes:
 - **Hover tooltips** with repo name, stars, language, and summary
 - **Click to open** any repo on GitHub
 - **Search** repos by name
-- **Five colormaps**: primary language, star count, license type, license family, repo age
+- **Nine colormaps**: primary language, star count, license type, license family, created date, owner type, last push, fork count, open issues
 - **Hierarchical topic labels** at multiple levels of detail for cluster display
 - **Methodology page** (`methodology.html`) linked from the nav bar
 
@@ -55,8 +62,10 @@ The output `github_map.html` includes:
 
 | Component | Choice |
 |---|---|
+| Repo enumeration | BigQuery (GH Archive) |
+| Repo metadata | GitHub GraphQL API (`repository()` direct lookups, batched 50/request) |
 | Embeddings | Cohere `embed-v4.0` (512-dim) |
-| Dimensionality reduction | PCA 512→256, then UMAP (n_neighbors=15, min_dist=0.05, cosine) |
+| Dimensionality reduction | UMAP (n_neighbors=15, min_dist=0.05, cosine) 512D → 2D |
 | Topic clustering | [Toponymy](https://github.com/TutteInstitute/Toponymy) (hierarchical density-based) |
 | Topic naming | Claude Sonnet |
 | README summarization | Claude Haiku |

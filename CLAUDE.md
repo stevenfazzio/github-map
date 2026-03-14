@@ -23,7 +23,7 @@ python 04_label_topics.py             # Toponymy + Claude Sonnet topic labels â†
 python 05_visualize.py                # DataMapPlot interactive HTML â†’ github_map.html
 ```
 
-**Two-phase fetch approach:** Step 00 queries GH Archive on BigQuery for repos with significant recent star activity, producing a generous candidate list (~25K). Step 01 then looks up each candidate via `repository(owner:, name:)` GraphQL queries (batched 25 per request), sorts by stars, and keeps the top 10K. This avoids the Search API's 1,000-result cap and non-deterministic ordering.
+**Two-phase fetch approach:** Step 00 queries GH Archive on BigQuery for repos with significant recent star activity, producing a generous candidate list (~25K). Step 01 then looks up each candidate via `repository(owner:, name:)` GraphQL queries (batched 50 per request), sorts by stars, and keeps the top 10K. This avoids the Search API's 1,000-result cap and non-deterministic ordering.
 
 **Fallback for users without GCP:** A `candidates.csv` is committed to the repo root. If `data/candidates.csv` doesn't exist, `01_fetch_repos.py` copies from the committed file automatically. Most contributors never need BigQuery access.
 
