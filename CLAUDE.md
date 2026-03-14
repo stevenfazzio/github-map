@@ -70,3 +70,9 @@ All outputs go to `data/` (gitignored). Key files: `candidates.csv`, `repos.parq
 ## Visualization Details
 
 `05_visualize.py` produces the main output — an interactive HTML map with multiple colormaps (language, stars, license, age), hover tooltips with summaries, click-to-open-repo, and search. Toponymy's hierarchical cluster layers are passed directly to DataMapPlot for multi-level topic label display.
+
+## docs/ Directory: Source vs. Generated Files
+
+- `docs/methodology.html` — **hand-authored source file**. Edit it directly for methodology content changes.
+- `docs/index.html` — **generated output** from `05_visualize.py` (copy of `data/github_map.html` with adjusted links). Do not edit directly.
+- `data/methodology.html` — **generated copy** of `docs/methodology.html` with nav links adjusted (`index.html` → `github_map.html`) for local use.

@@ -19,7 +19,6 @@ from sklearn.neighbors import NearestNeighbors
 
 from config import (
     DOCS_INDEX_HTML,
-    DOCS_METHODOLOGY_HTML,
     EMBEDDINGS_NPZ,
     GITHUB_MAP_HTML,
     LABELS_PARQUET,
@@ -27,6 +26,10 @@ from config import (
     REPOS_PARQUET,
     UMAP_COORDS_NPZ,
 )
+
+# docs/methodology.html is the hand-authored source for the methodology page.
+# _write_methodology() reads it and writes an adjusted copy to data/.
+METHODOLOGY_SOURCE_HTML = Path(__file__).parent / "docs" / "methodology.html"
 
 FILTER_PANEL_HTML = Path(__file__).parent / "filter_panel.html"
 
@@ -474,7 +477,6 @@ def main():
 
     # ── Write docs/ copies for GitHub Pages ───────────────────────────────────
     _copy_for_docs(GITHUB_MAP_HTML, DOCS_INDEX_HTML)
-    _write_methodology(DOCS_METHODOLOGY_HTML, map_href="index.html")
     print(f"Saved docs/ copies for GitHub Pages")
 
 
@@ -639,280 +641,14 @@ def _inject_nav(html_path):
 # ── Methodology page ─────────────────────────────────────────────────────────
 
 
-def _write_methodology(output_path, map_href="github_map.html"):
-    """Write standalone methodology HTML page."""
-    html = """\
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Methodology — GitHub Map</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
-<style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-body {
-  font-family: 'Roboto', system-ui, sans-serif;
-  color: #000;
-  background: #fff;
-  line-height: 1.7;
-  font-size: 16px;
-}
-.site-nav {
-  position: fixed; top: 0; left: 0; right: 0; z-index: 200;
-  background: rgba(255,255,255,0.85); backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px); border-bottom: 1px solid #e0e0e0;
-  padding: 0 24px; height: 44px; display: flex; align-items: center; gap: 24px;
-  font-size: 14px; font-weight: 500; pointer-events: auto;
-}
-.site-nav a { color: #333; text-decoration: none; transition: color 0.15s; }
-.site-nav a:hover { color: #1a73e8; }
-.site-nav a.active { color: #1a73e8; border-bottom: 2px solid #1a73e8; line-height: 42px; }
-.content { max-width: 720px; margin: 0 auto; padding: 68px 24px 80px; }
-h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
-.subtitle { color: #555; font-size: 16px; margin-bottom: 40px; }
-h2 {
-  font-size: 20px; font-weight: 700; margin-top: 48px; margin-bottom: 16px;
-  padding-bottom: 6px; border-bottom: 1px solid #e0e0e0; scroll-margin-top: 72px;
-}
-h3 { font-size: 16px; font-weight: 700; margin-top: 24px; margin-bottom: 8px; }
-p { margin-bottom: 16px; }
-a { color: #1a73e8; text-decoration: none; }
-a:hover { text-decoration: underline; }
-ul, ol { margin-bottom: 16px; padding-left: 24px; }
-li { margin-bottom: 6px; }
-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 15px; }
-th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #e0e0e0; }
-th { font-weight: 500; color: #555; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
-code { font-size: 14px; background: #f5f5f5; padding: 2px 6px; border-radius: 3px; }
-.pipeline-step { margin-bottom: 12px; padding-left: 16px; border-left: 3px solid #e0e0e0; }
-.pipeline-step strong { display: block; margin-bottom: 2px; }
-.pipeline-step p { margin-bottom: 0; color: #333; font-size: 15px; }
-.note { background: #f8f9fa; border-left: 3px solid #1a73e8; padding: 12px 16px; margin: 16px 0; font-size: 14px; color: #333; }
-.toc { margin-bottom: 32px; padding-bottom: 16px; border-bottom: 1px solid #e0e0e0; }
-.toc ul { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px 16px; }
-.toc li { margin: 0; }
-.toc a { font-size: 14px; font-weight: 500; color: #555; text-decoration: none; transition: color 0.15s; }
-.toc a:hover { color: #1a73e8; text-decoration: none; }
-.toc a.active { color: #1a73e8; }
-@media (min-width: 1100px) {
-  .content { margin-left: calc(50% - 260px); margin-right: auto; }
-  .toc { position: fixed; top: 68px; left: calc(50% - 444px); width: 160px; border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
-  .toc ul { display: block; }
-  .toc li { margin-bottom: 12px; }
-  .toc a { display: block; padding-left: 12px; border-left: 2px solid transparent; line-height: 1.4; }
-  .toc a.active { color: #1a73e8; border-left-color: #1a73e8; }
-}
-</style>
-</head>
-<body>
-<nav class="site-nav">
-  <a href="github_map.html">Visualization</a>
-  <a href="methodology.html" class="active">Methodology</a>
-</nav>
-<div class="content">
+def _write_methodology(output_path):
+    """Write data/ copy of methodology page with nav links adjusted for local use.
 
-<h1>Methodology</h1>
-<p class="subtitle">How the GitHub Map visualization is built</p>
-
-<nav class="toc">
-  <ul>
-    <li><a href="#overview">Overview</a></li>
-    <li><a href="#corpus-collection">Corpus Collection</a></li>
-    <li><a href="#processing-pipeline">Processing Pipeline</a></li>
-    <li><a href="#tools">Tools &amp; Technologies</a></li>
-    <li><a href="#using-the-visualization">Using the Visualization</a></li>
-    <li><a href="#field-definitions">Field Definitions</a></li>
-  </ul>
-</nav>
-
-<h2 id="overview">Overview</h2>
-<p>
-  This visualization maps the top 10,000 most-starred GitHub repositories onto a 2D plane,
-  positioned by the semantic similarity of their README files. Repositories with similar
-  descriptions and purposes appear near each other, revealing natural clusters of related
-  projects across the open-source ecosystem.
-</p>
-<p>
-  The map is generated by an automated pipeline that fetches repository data from the GitHub
-  API, embeds README content into high-dimensional vectors, reduces those vectors to two
-  dimensions, applies hierarchical topic clustering, and renders an interactive HTML
-  visualization.
-</p>
-
-<h2 id="corpus-collection">Corpus Collection</h2>
-<p>
-  The pipeline uses a two-phase approach to identify the top 10,000 most-starred repositories.
-  First, <code>00_enumerate_repos.py</code> queries GH Archive on BigQuery for repositories
-  with significant recent star activity, producing a generous candidate list (~25K repos).
-  Then, <code>01_fetch_repos.py</code> looks up each candidate via <code>repository(owner:, name:)</code>
-  GraphQL queries (batched 50 per request), collecting metadata (name, stars, language, license,
-  creation date) and the full README content. Results are sorted by star count and the top
-  10,000 are kept. This avoids the Search API's 1,000-result cap and non-deterministic ordering.
-</p>
-<p>
-  Repositories whose READMEs are shorter than 200 characters after stripping whitespace are
-  excluded before embedding. These include empty READMEs, placeholder files, and monorepo
-  pointers that lack sufficient content for meaningful embedding and map placement.
-</p>
-<p>
-  Each README is then summarized into a concise description using Claude Haiku, providing
-  clean hover-text for the visualization and a normalized input for downstream embedding.
-</p>
-
-<h2 id="processing-pipeline">Processing Pipeline</h2>
-
-<div class="pipeline-step">
-  <strong>0. Enumerate candidates</strong>
-  <p><code>00_enumerate_repos.py</code> &mdash; Queries GH Archive on BigQuery for repositories
-  with significant recent star activity, producing a generous candidate list (~25K repos)
-  saved to <code>candidates.csv</code>. This step is optional &mdash; a committed
-  <code>candidates.csv</code> fallback is used automatically if this step is skipped.</p>
-</div>
-
-<div class="pipeline-step">
-  <strong>1. Fetch repositories</strong>
-  <p><code>01_fetch_repos.py</code> &mdash; Looks up each candidate via <code>repository(owner:, name:)</code>
-  GraphQL queries (batched 50 per request), fetching metadata and README content,
-  then sorts by stars and keeps the top 10,000 in <code>repos.parquet</code>.</p>
-</div>
-
-<div class="pipeline-step">
-  <strong>2. Summarize READMEs</strong>
-  <p><code>01b_summarize_readmes.py</code> &mdash; Sends each README to Claude Haiku to produce
-  a short natural-language summary, stored back into <code>repos.parquet</code>.</p>
-</div>
-
-<div class="pipeline-step">
-  <strong>3. Embed READMEs</strong>
-  <p><code>02_embed_readmes.py</code> &mdash; Encodes README text into 512-dimensional vectors
-  using Cohere's <code>embed-v4.0</code> model, saved to <code>embeddings.npz</code>.</p>
-</div>
-
-<div class="pipeline-step">
-  <strong>4. Reduce to 2D</strong>
-  <p><code>03_reduce_umap.py</code> &mdash; Applies UMAP (n_neighbors=15, min_dist=0.05, cosine metric)
-  to project from 512D to 2D coordinates in <code>umap_coords.npz</code>.</p>
-</div>
-
-<div class="pipeline-step">
-  <strong>5. Label topics</strong>
-  <p><code>04_label_topics.py</code> &mdash; Uses the Toponymy library for hierarchical density-based
-  clustering, then sends representative documents from each cluster to Claude Sonnet
-  to generate human-readable topic labels at multiple levels of detail, saved to <code>labels.parquet</code>.</p>
-</div>
-
-<div class="pipeline-step">
-  <strong>6. Visualize</strong>
-  <p><code>05_visualize.py</code> &mdash; Combines coordinates, labels, and metadata into an
-  interactive HTML map using DataMapPlot, with multiple colormaps, search, hover tooltips,
-  and click-to-open functionality.</p>
-</div>
-
-<h2 id="tools">Tools &amp; Technologies</h2>
-<table>
-  <thead>
-    <tr><th>Tool</th><th>Role</th></tr>
-  </thead>
-  <tbody>
-    <tr><td><a href="https://docs.cohere.com/reference/embed">Cohere <code>embed-v4.0</code></a></td><td>README text embedding (512 dimensions)</td></tr>
-    <tr><td><a href="https://github.com/lmcinnes/umap">UMAP</a></td><td>Dimensionality reduction from 512D to 2D</td></tr>
-    <tr><td><a href="https://github.com/TutteInstitute/toponymy">Toponymy</a></td><td>Hierarchical density-based topic clustering</td></tr>
-    <tr><td><a href="https://github.com/TutteInstitute/datamapplot">DataMapPlot</a></td><td>Interactive HTML map rendering</td></tr>
-    <tr><td><a href="https://www.anthropic.com/claude/haiku">Claude Haiku</a></td><td>README summarization</td></tr>
-    <tr><td><a href="https://www.anthropic.com/claude/sonnet">Claude Sonnet</a></td><td>Topic label generation</td></tr>
-    <tr><td><a href="https://docs.github.com/en/graphql">GitHub GraphQL API</a></td><td>Repository metadata and README fetching</td></tr>
-    <tr><td><a href="https://cloud.google.com/bigquery">BigQuery</a> (GH Archive)</td><td>Candidate repository enumeration</td></tr>
-  </tbody>
-</table>
-
-<h2 id="using-the-visualization">Using the Visualization</h2>
-<ul>
-  <li><strong>Pan and zoom</strong> &mdash; Click and drag to pan; scroll to zoom in and out.</li>
-  <li><strong>Hover</strong> &mdash; Hover over any point to see the repository name, star count,
-  primary language, and a short summary.</li>
-  <li><strong>Click</strong> &mdash; Click any point to open the repository on GitHub in a new tab.</li>
-  <li><strong>Search</strong> &mdash; Use the search box to find specific repositories by name.</li>
-  <li><strong>Colormaps</strong> &mdash; Switch between colormaps using the dropdown to color points
-  by language, star count, license, creation date, owner type, activity recency, fork count, or open issues.</li>
-  <li><strong>Topic labels</strong> &mdash; Cluster labels appear on the map at multiple levels of detail,
-  from broad categories down to specific sub-topics. The number of levels is chosen
-  automatically by the clustering algorithm.</li>
-</ul>
-
-<h2 id="field-definitions">Field Definitions</h2>
-<table>
-  <thead>
-    <tr><th>Colormap</th><th>Description</th></tr>
-  </thead>
-  <tbody>
-    <tr><td>Primary Language</td><td>The repository's primary programming language as reported by GitHub. The top 9 languages are shown individually; all others are grouped as "Other".</td></tr>
-    <tr><td>Star Count (log10)</td><td>Base-10 logarithm of the repository's star count. Log scale helps distinguish differences among highly-starred repos.</td></tr>
-    <tr><td>License Type</td><td>The specific license identified by GitHub (e.g., MIT, Apache-2.0, GPL-3.0). Repos without a detected license show as "None".</td></tr>
-    <tr><td>License Family</td><td>Licenses grouped into families: MIT, Apache, GPL, BSD, Creative Commons, MPL, Other Permissive, and Unknown/None.</td></tr>
-    <tr><td>Created Date</td><td>The date the repository was created on GitHub. Older repos appear blue; newer repos appear yellow.</td></tr>
-    <tr><td>Owner Type</td><td>Whether the repository is owned by an individual User or an Organization account.</td></tr>
-    <tr><td>Last Push (days ago)</td><td>Days since the most recent push to the repository. Green indicates recent activity; red indicates staleness.</td></tr>
-    <tr><td>Fork Count (log10)</td><td>Base-10 logarithm of the repository's fork count. Log scale helps distinguish differences among heavily-forked repos.</td></tr>
-    <tr><td>Open Issues (log10)</td><td>Base-10 logarithm of the repository's open issue count. Log scale normalizes the wide range of issue counts.</td></tr>
-  </tbody>
-</table>
-
-</div>
-
-<script>
-(function() {
-  var tocLinks = document.querySelectorAll('.toc a');
-  var sections = [];
-  tocLinks.forEach(function(link) {
-    var id = link.getAttribute('href').slice(1);
-    var el = document.getElementById(id);
-    if (el) sections.push({ id: id, el: el, link: link });
-  });
-  var debounceTimer;
-  window.addEventListener('scroll', function() {
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(function() {
-      var current = '';
-      for (var i = 0; i < sections.length; i++) {
-        if (sections[i].el.getBoundingClientRect().top < 100) current = sections[i].id;
-      }
-      tocLinks.forEach(function(link) {
-        link.classList.toggle('active', link.getAttribute('href') === '#' + current);
-      });
-    }, 50);
-  }, { passive: true });
-  tocLinks.forEach(function(link) {
-    link.addEventListener('click', function(e) {
-      e.preventDefault();
-      var id = this.getAttribute('href').slice(1);
-      var target = document.getElementById(id);
-      if (target) {
-        var top = target.getBoundingClientRect().top + window.pageYOffset - 68;
-        window.scrollTo({ top: top, behavior: 'smooth' });
-        history.pushState(null, '', '#' + id);
-      }
-    });
-  });
-  if (window.location.hash) {
-    var id = window.location.hash.slice(1);
-    var target = document.getElementById(id);
-    if (target) {
-      setTimeout(function() {
-        var top = target.getBoundingClientRect().top + window.pageYOffset - 68;
-        window.scrollTo({ top: top, behavior: 'smooth' });
-      }, 0);
-    }
-  }
-})();
-</script>
-</body>
-</html>"""
-
-    if map_href != "github_map.html":
-        html = html.replace('href="github_map.html"', f'href="{map_href}"')
+    The source of truth is docs/methodology.html (uses href="index.html" for GitHub Pages).
+    This function reads that source and writes a copy with href="github_map.html" for data/.
+    """
+    html = METHODOLOGY_SOURCE_HTML.read_text()
+    html = html.replace('href="index.html"', 'href="github_map.html"')
     Path(output_path).write_text(html)
 
 

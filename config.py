@@ -29,7 +29,6 @@ METHODOLOGY_HTML = DATA_DIR / "methodology.html"
 DOCS_DIR = Path("docs")
 DOCS_DIR.mkdir(exist_ok=True)
 DOCS_INDEX_HTML = DOCS_DIR / "index.html"
-DOCS_METHODOLOGY_HTML = DOCS_DIR / "methodology.html"
 
 # ── API keys ─────────────────────────────────────────────────────────────────
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
