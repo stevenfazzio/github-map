@@ -296,13 +296,8 @@ def main():
     # 2. Star Count (continuous, log10)
     star_counts = np.log10(df["stargazers_count"].values.astype(float))
 
-    # 3. License Type (categorical)
+    # 3. License Family (categorical, grouped from license)
     licenses = df["license"].fillna("").replace("", "None").values
-    unique_licenses = sorted(set(licenses))
-    license_palette = glasbey.create_palette(palette_size=len(unique_licenses))
-    license_color_mapping = dict(zip(unique_licenses, license_palette))
-
-    # 4. License Family (categorical, grouped from License Type)
     license_to_family = {
         "AGPL-3.0": "GPL",
         "GPL-2.0": "GPL",
@@ -361,10 +356,10 @@ def main():
         days_since_push = np.zeros(len(df), dtype=float)
 
     if "pushed_at" in df.columns:
-        extra_rawdata.append(days_since_push)
+        extra_rawdata.append(np.log10(days_since_push.clip(min=1)))
         extra_metadata.append({
             "field": "last_push",
-            "description": "Last Push (days ago)",
+            "description": "Last Push days (log10)",
             "kind": "continuous",
             "cmap": "RdYlGn_r",
         })
@@ -410,7 +405,7 @@ def main():
         "search_text": search_text,
     })
 
-    all_rawdata = [languages, star_counts, licenses, license_families, created_dates] + extra_rawdata
+    all_rawdata = [languages, star_counts, license_families, created_dates] + extra_rawdata
     all_metadata = [
             {
                 "field": "language",
@@ -423,12 +418,6 @@ def main():
                 "description": "Star Count (log10)",
                 "kind": "continuous",
                 "cmap": "YlOrRd",
-            },
-            {
-                "field": "license",
-                "description": "License Type",
-                "kind": "categorical",
-                "color_mapping": license_color_mapping,
             },
             {
                 "field": "license_family",
@@ -600,6 +589,7 @@ def _inject_nav(html_path):
 .site-nav a{color:#333;text-decoration:none;transition:color 0.15s;}
 .site-nav a:hover{color:#1a73e8;}
 .site-nav a.active{color:#1a73e8;border-bottom:2px solid #1a73e8;line-height:42px;}
+.color-swatch{min-width:60px;}
 </style>"""
 
     nav_html = """<nav class="site-nav">
