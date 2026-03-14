@@ -155,19 +155,33 @@ def main():
     _safe_write_parquet(df_meta, METADATA_PARQUET, original_len, original_cols)
     print(f"Updated {METADATA_PARQUET} with {len(recovered)} recovered READMEs")
 
-    # Re-select repos.parquet
+    # Re-select repos.parquet, carrying forward existing summaries
     df_sorted = df_meta.sort_values("stargazers_count", ascending=False)
     df_with_readme = df_sorted[df_sorted["readme"].str.strip().str.len() >= MIN_README_CHARS]
     df_final = df_with_readme.head(FETCH_OVERSHOOT_COUNT).reset_index(drop=True)
 
-    # Back up existing repos.parquet
+    # Back up existing repos.parquet and carry forward summaries
     if REPOS_PARQUET.exists():
         backup_repos = DATA_DIR / "repos_pre_readme_patch.parquet"
         if not backup_repos.exists():
             shutil.copy2(REPOS_PARQUET, backup_repos)
             print(f"Backed up {REPOS_PARQUET} → {backup_repos}")
 
-    _safe_write_parquet(df_final, REPOS_PARQUET, len(df_final), original_cols)
+        # Carry forward summary column from old repos.parquet
+        df_old = pd.read_parquet(REPOS_PARQUET)
+        if "summary" in df_old.columns:
+            old_summaries = dict(zip(df_old["full_name"], df_old["summary"].fillna("")))
+            if "summary" not in df_final.columns:
+                df_final["summary"] = ""
+            for idx, row in df_final.iterrows():
+                current = row["summary"] if pd.notna(row["summary"]) else ""
+                if not current and row["full_name"] in old_summaries and old_summaries[row["full_name"]]:
+                    df_final.at[idx, "summary"] = old_summaries[row["full_name"]]
+            carried = df_final["summary"].fillna("").ne("").sum()
+            print(f"Carried forward {carried} existing summaries")
+
+    final_cols = set(df_final.columns)
+    _safe_write_parquet(df_final, REPOS_PARQUET, len(df_final), final_cols)
 
     min_stars = df_final["stargazers_count"].iloc[-1] if len(df_final) > 0 else 0
     print(f"\nRe-selected {len(df_final)} repos → {REPOS_PARQUET} (min stars: {min_stars})")
