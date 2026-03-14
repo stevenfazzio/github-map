@@ -500,7 +500,7 @@ def _inject_filters(html_path, df, languages):
     # 2. CSS fixes for content-wrapper (runs after _inject_nav, no conflicts)
     html = html.replace(
         "height:100%;z-index:1;padding:0",
-        "height:100vh;z-index:1;box-sizing:border-box;padding:0",
+        "height:calc(100vh - 44px);z-index:1;box-sizing:border-box;padding:0",
         1,
     )
     html = html.replace(
