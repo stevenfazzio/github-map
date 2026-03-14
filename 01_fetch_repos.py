@@ -71,13 +71,29 @@ fragment MetadataFields on Repository {
 }
 """
 
-README_FRAGMENT = """
-fragment ReadmeFields on Repository {
-  nameWithOwner
-  readme_md: object(expression: "HEAD:README.md") { ... on Blob { text } }
-  readme_lower: object(expression: "HEAD:readme.md") { ... on Blob { text } }
-}
-"""
+README_ALIASES = [
+    ("readme_md", "README.md"),
+    ("readme_lower", "readme.md"),
+    ("readme_rst", "README.rst"),
+    ("readme_txt", "README.txt"),
+    ("readme_bare", "README"),
+    ("readme_title", "Readme.md"),
+    ("readme_markdown", "README.markdown"),
+    ("readme_rst_lower", "readme.rst"),
+    ("readme_txt_lower", "readme.txt"),
+    ("readme_bare_lower", "readme"),
+    ("readme_titlecase", "ReadMe.md"),
+]
+
+def _build_readme_fragment() -> str:
+    """Build the ReadmeFields fragment from README_ALIASES."""
+    lines = ["fragment ReadmeFields on Repository {", "  nameWithOwner"]
+    for alias, filename in README_ALIASES:
+        lines.append(f'  {alias}: object(expression: "HEAD:{filename}") {{ ... on Blob {{ text }} }}')
+    lines.append("}")
+    return "\n".join(lines)
+
+README_FRAGMENT = _build_readme_fragment()
 
 
 def _graphql_query(query: str, variables: dict | None = None, max_retries: int = 5) -> dict:
@@ -131,8 +147,8 @@ def _graphql_query(query: str, variables: dict | None = None, max_retries: int =
 
 def _extract_readme(node: dict) -> str:
     """Extract README text from GraphQL aliases, taking the first non-null."""
-    for key in ("readme_md", "readme_lower"):
-        obj = node.get(key)
+    for alias, _ in README_ALIASES:
+        obj = node.get(alias)
         if obj and obj.get("text"):
             return obj["text"]
     return ""
