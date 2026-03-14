@@ -153,13 +153,12 @@ def _build_point_labels_js():
     var hoverData = e.detail.hoverData;
     if (!datamap.pointLayer) return;
     var positions = datamap.pointLayer.props.data.attributes.getPosition.value;
-    var titles = hoverData.hover_text;
+    var titles = hoverData.project_title || hoverData.hover_text;
     var n = titles.length;
     var allData = [];
     for (var i = 0; i < n; i++) {
       var t = titles[i];
       if (!t) continue;
-      t = t.split('\\n')[0];
       allData.push({ text: t, position: [positions[i * 2], positions[i * 2 + 1]], idx: i });
     }
     var visibleData = allData;
@@ -263,19 +262,26 @@ def main():
     topic_name_vectors = [labels_df[c].values for c in label_columns]
 
     # ── Hover text ───────────────────────────────────────────────────────────
-    has_summary = "summary" in df.columns
     has_forks = "fork_count" in df.columns
-    hover_text = []
+    has_summary = "summary" in df.columns
+    has_title = "project_title" in df.columns
+
+    # Build per-row metadata line for hover card
+    hover_meta = []
     for _, row in df.iterrows():
-        line1 = row["full_name"]
         stars = f"⭐ {row['stargazers_count']:,}"
         forks = f" | 🍴 {row['fork_count']:,}" if has_forks else ""
         lang = row["language"] or "N/A"
-        line2 = f"{stars}{forks} | {lang}"
-        text = f"{line1}\n{line2}"
-        if has_summary and row.get("summary"):
-            text += f"\n\n{row['summary']}"
-        hover_text.append(text)
+        hover_meta.append(f"{stars}{forks} | {lang}")
+
+    hover_text = df["full_name"].tolist()  # required by DataMapPlot
+
+    hover_text_html_template = (
+        '<b>{project_title}</b><br>'
+        '{full_name}<br>'
+        '{hover_meta}<br><br>'
+        '{summary}'
+    )
 
     # ── Marker sizes (sqrt of stars) ─────────────────────────────────────────
     marker_sizes = np.sqrt(df["stargazers_count"].values).astype(float)
@@ -355,14 +361,18 @@ def main():
 
     # Extra point data for filters (all as strings for DataMapPlot serialization)
     created_years = pd.to_datetime(df["created_at"], utc=True).dt.year.values
-    summaries = df["summary"].fillna("").values if "summary" in df.columns else [""] * len(df)
+    summaries = df["summary"].fillna("").values if has_summary else [""] * len(df)
+    project_titles = df["project_title"].fillna("").values if has_title else df["full_name"].str.split("/").str[1].values
     search_text = [
-        f"{fn} {lang or ''} {summ}"
-        for fn, lang, summ in zip(df["full_name"], df["language"].fillna(""), summaries)
+        f"{fn} {title} {lang or ''} {summ}"
+        for fn, title, lang, summ in zip(df["full_name"], project_titles, df["language"].fillna(""), summaries)
     ]
 
     extra_data = pd.DataFrame({
         "full_name": df["full_name"].values,
+        "project_title": project_titles,
+        "summary": summaries,
+        "hover_meta": hover_meta,
         "stars": df["stargazers_count"].astype(str).values,
         "created_year": created_years.astype(str),
         "days_since_push": days_since_push.astype(int).astype(str) if "pushed_at" in df.columns else "0",
@@ -451,6 +461,7 @@ def main():
         coords,
         *topic_name_vectors,
         hover_text=hover_text,
+        hover_text_html_template=hover_text_html_template,
         marker_size_array=marker_sizes,
         extra_point_data=extra_data,
         on_click="window.open(`https://github.com/{full_name}`, '_blank')",
