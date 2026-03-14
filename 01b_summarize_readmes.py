@@ -43,7 +43,7 @@ def summarize_readme(client: anthropic.Anthropic, text: str, full_name: str) -> 
     try:
         obj = json.loads(raw)
         title = obj.get("title") or repo_name
-        summary = obj.get("summary", raw)
+        summary = obj.get("summary") or raw
     except (json.JSONDecodeError, AttributeError):
         title = repo_name
         summary = raw
