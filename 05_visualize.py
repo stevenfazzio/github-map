@@ -96,11 +96,9 @@ def main():
     family_palette = glasbey.create_palette(palette_size=len(unique_families))
     family_color_mapping = dict(zip(unique_families, family_palette))
 
-    # 5. Repo Age (continuous, years since creation)
+    # 5. Repo Created Date (datetime, for continuous colormap)
     now = datetime.now(tz=timezone.utc)
-    repo_ages = np.array(
-        [(now - pd.to_datetime(d, utc=True).to_pydatetime()).days / 365.25 for d in df["created_at"]]
-    )
+    created_dates = pd.to_datetime(df["created_at"], utc=True).values
 
     # 6–9. New colormaps from GraphQL fields (guarded for backward compat)
     extra_rawdata = []
@@ -156,7 +154,7 @@ def main():
     # ── Build the interactive plot ───────────────────────────────────────────
     extra_data = pd.DataFrame({"full_name": df["full_name"].values})
 
-    all_rawdata = [languages, star_counts, licenses, license_families, repo_ages] + extra_rawdata
+    all_rawdata = [languages, star_counts, licenses, license_families, created_dates] + extra_rawdata
     all_metadata = [
             {
                 "field": "language",
@@ -183,10 +181,10 @@ def main():
                 "color_mapping": family_color_mapping,
             },
             {
-                "field": "age",
-                "description": "Repo Age (years)",
-                "kind": "continuous",
-                "cmap": "viridis_r",
+                "field": "created",
+                "description": "Created Date",
+                "kind": "datetime",
+                "cmap": "viridis",
             },
     ] + extra_metadata
 
@@ -473,7 +471,7 @@ code { font-size: 14px; background: #f5f5f5; padding: 2px 6px; border-radius: 3p
   <li><strong>Click</strong> &mdash; Click any point to open the repository on GitHub in a new tab.</li>
   <li><strong>Search</strong> &mdash; Use the search box to find specific repositories by name.</li>
   <li><strong>Colormaps</strong> &mdash; Switch between colormaps using the dropdown to color points
-  by language, star count, license, repo age, owner type, activity recency, fork count, or open issues.</li>
+  by language, star count, license, creation date, owner type, activity recency, fork count, or open issues.</li>
   <li><strong>Topic labels</strong> &mdash; Cluster labels appear on the map at multiple levels of detail,
   from broad categories down to specific sub-topics. The number of levels is chosen
   automatically by the clustering algorithm.</li>
@@ -489,7 +487,7 @@ code { font-size: 14px; background: #f5f5f5; padding: 2px 6px; border-radius: 3p
     <tr><td>Star Count (log10)</td><td>Base-10 logarithm of the repository's star count. Log scale helps distinguish differences among highly-starred repos.</td></tr>
     <tr><td>License Type</td><td>The specific license identified by GitHub (e.g., MIT, Apache-2.0, GPL-3.0). Repos without a detected license show as "None".</td></tr>
     <tr><td>License Family</td><td>Licenses grouped into families: MIT, Apache, GPL, BSD, Creative Commons, MPL, Other Permissive, and Unknown/None.</td></tr>
-    <tr><td>Repo Age (years)</td><td>Years since the repository was created, calculated from the GitHub creation date.</td></tr>
+    <tr><td>Created Date</td><td>The date the repository was created on GitHub. Older repos appear blue; newer repos appear yellow.</td></tr>
     <tr><td>Owner Type</td><td>Whether the repository is owned by an individual User or an Organization account.</td></tr>
     <tr><td>Last Push (days ago)</td><td>Days since the most recent push to the repository. Green indicates recent activity; red indicates staleness.</td></tr>
     <tr><td>Fork Count (log10)</td><td>Base-10 logarithm of the repository's fork count. Log scale helps distinguish differences among heavily-forked repos.</td></tr>
