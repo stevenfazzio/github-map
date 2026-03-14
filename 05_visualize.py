@@ -329,22 +329,12 @@ def main():
     now = datetime.now(tz=timezone.utc)
     created_dates = pd.to_datetime(df["created_at"], utc=True).values
 
-    # 6–9. New colormaps from GraphQL fields (guarded for backward compat)
-    extra_rawdata = []
-    extra_metadata = []
-
+    # 6–9. Compute data for extra colormaps (guarded for backward compat)
     if "owner_type" in df.columns:
         owner_types = df["owner_type"].fillna("Unknown").replace("", "Unknown").values
         unique_owners = sorted(set(owner_types))
         owner_palette = glasbey.create_palette(palette_size=len(unique_owners))
         owner_color_mapping = dict(zip(unique_owners, owner_palette))
-        extra_rawdata.append(owner_types)
-        extra_metadata.append({
-            "field": "owner_type",
-            "description": "Owner Type",
-            "kind": "categorical",
-            "color_mapping": owner_color_mapping,
-        })
 
     if "pushed_at" in df.columns:
         days_since_push = np.array([
@@ -355,34 +345,11 @@ def main():
     else:
         days_since_push = np.zeros(len(df), dtype=float)
 
-    if "pushed_at" in df.columns:
-        extra_rawdata.append(np.log10(days_since_push.clip(min=1)))
-        extra_metadata.append({
-            "field": "last_push",
-            "description": "Last Push days (log10)",
-            "kind": "continuous",
-            "cmap": "RdYlGn_r",
-        })
-
     if "fork_count" in df.columns:
         fork_counts_log = np.log10(df["fork_count"].values.astype(float).clip(min=1))
-        extra_rawdata.append(fork_counts_log)
-        extra_metadata.append({
-            "field": "forks",
-            "description": "Fork Count (log10)",
-            "kind": "continuous",
-            "cmap": "YlGnBu",
-        })
 
     if "open_issue_count" in df.columns:
         open_issues_log = np.log10(df["open_issue_count"].values.astype(float).clip(min=1))
-        extra_rawdata.append(open_issues_log)
-        extra_metadata.append({
-            "field": "open_issues",
-            "description": "Open Issues (log10)",
-            "kind": "continuous",
-            "cmap": "OrRd",
-        })
 
     # ── Build the interactive plot ───────────────────────────────────────────
 
@@ -405,7 +372,8 @@ def main():
         "search_text": search_text,
     })
 
-    all_rawdata = [languages, star_counts, license_families, created_dates] + extra_rawdata
+    # Order: categoricals first, then temporal, then count metrics
+    all_rawdata = [languages, license_families]
     all_metadata = [
             {
                 "field": "language",
@@ -414,24 +382,70 @@ def main():
                 "color_mapping": lang_color_mapping,
             },
             {
-                "field": "stars",
-                "description": "Star Count (log10)",
-                "kind": "continuous",
-                "cmap": "YlOrRd",
-            },
-            {
                 "field": "license_family",
                 "description": "License Family",
                 "kind": "categorical",
                 "color_mapping": family_color_mapping,
             },
-            {
-                "field": "created",
-                "description": "Created Date",
-                "kind": "datetime",
-                "cmap": "viridis",
-            },
-    ] + extra_metadata
+    ]
+
+    # Owner Type (categorical)
+    if "owner_type" in df.columns:
+        all_rawdata.append(owner_types)
+        all_metadata.append({
+            "field": "owner_type",
+            "description": "Owner Type",
+            "kind": "categorical",
+            "color_mapping": owner_color_mapping,
+        })
+
+    # Created Date (temporal)
+    all_rawdata.append(created_dates)
+    all_metadata.append({
+            "field": "created",
+            "description": "Created Date",
+            "kind": "datetime",
+            "cmap": "viridis",
+    })
+
+    # Last Push days (temporal/continuous)
+    if "pushed_at" in df.columns:
+        all_rawdata.append(np.log10(days_since_push.clip(min=1)))
+        all_metadata.append({
+            "field": "last_push",
+            "description": "Last Push days (log10)",
+            "kind": "continuous",
+            "cmap": "RdYlGn_r",
+        })
+
+    # Star Count (continuous)
+    all_rawdata.append(star_counts)
+    all_metadata.append({
+            "field": "stars",
+            "description": "Star Count (log10)",
+            "kind": "continuous",
+            "cmap": "YlOrRd",
+    })
+
+    # Fork Count (continuous)
+    if "fork_count" in df.columns:
+        all_rawdata.append(fork_counts_log)
+        all_metadata.append({
+            "field": "forks",
+            "description": "Fork Count (log10)",
+            "kind": "continuous",
+            "cmap": "YlGnBu",
+        })
+
+    # Open Issues (continuous)
+    if "open_issue_count" in df.columns:
+        all_rawdata.append(open_issues_log)
+        all_metadata.append({
+            "field": "open_issues",
+            "description": "Open Issues (log10)",
+            "kind": "continuous",
+            "cmap": "OrRd",
+        })
 
     fig = datamapplot.create_interactive_plot(
         coords,
