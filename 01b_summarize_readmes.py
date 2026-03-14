@@ -11,12 +11,29 @@ from tqdm import tqdm
 
 from config import ANTHROPIC_API_KEY, ANTHROPIC_MODEL_SUMMARIZE, REPOS_PARQUET
 
+PROJECT_TYPES = [
+    "Library",
+    "Framework",
+    "CLI Tool",
+    "Application",
+    "Dataset",
+    "Tutorial/Educational",
+    "Collection/Awesome List",
+    "Plugin/Extension",
+    "API/Service",
+    "Research",
+    "Other",
+]
+
 SYSTEM_PROMPT = (
     "You are given the README of a GitHub repository. "
-    "Return a JSON object with two fields:\n"
+    "Return a JSON object with three fields:\n"
     '- "title": The project\'s display name as presented in the README. '
     "If the README does not mention a project name, return null.\n"
-    '- "summary": A 1-2 sentence summary of what the project does.\n\n'
+    '- "summary": A 1-2 sentence summary of what the project does.\n'
+    '- "project_type": One of: '
+    + ", ".join(f'"{t}"' for t in PROJECT_TYPES)
+    + ".\n\n"
     "Respond with only the JSON object, no markdown fencing."
 )
 MAX_README_CHARS = 4_000
@@ -24,8 +41,10 @@ CHECKPOINT_EVERY = 100
 SLEEP_BETWEEN_CALLS = 0.1
 
 
-def summarize_readme(client: anthropic.Anthropic, text: str, full_name: str) -> tuple[str, str]:
-    """Return (project_title, summary) for a repo README."""
+def summarize_readme(
+    client: anthropic.Anthropic, text: str, full_name: str
+) -> tuple[str, str, str]:
+    """Return (project_title, summary, project_type) for a repo README."""
     response = client.messages.create(
         model=ANTHROPIC_MODEL_SUMMARIZE,
         max_tokens=250,
@@ -44,14 +63,18 @@ def summarize_readme(client: anthropic.Anthropic, text: str, full_name: str) -> 
         obj = json.loads(raw)
         title = obj.get("title") or repo_name
         summary = obj.get("summary") or raw
+        project_type = obj.get("project_type", "Other")
+        if project_type not in PROJECT_TYPES:
+            project_type = "Other"
     except (json.JSONDecodeError, AttributeError):
         title = repo_name
         summary = raw
+        project_type = "Other"
 
     # Strip leading markdown headings from summary as safety net
     summary = re.sub(r"^#+\s+.*?\n+", "", summary).strip()
 
-    return title, summary
+    return title, summary, project_type
 
 
 def main():
@@ -61,6 +84,8 @@ def main():
         df["summary"] = ""
     if "project_title" not in df.columns:
         df["project_title"] = ""
+    if "project_type" not in df.columns:
+        df["project_type"] = ""
 
     # Identify rows needing processing (project_title missing)
     needs_summary = df["project_title"].fillna("").eq("")
@@ -87,12 +112,14 @@ def main():
         if not text:
             df.at[idx, "project_title"] = full_name.split("/")[1]
             df.at[idx, "summary"] = ""
+            df.at[idx, "project_type"] = "Other"
             count += 1
             continue
 
-        title, summary = summarize_readme(client, text, full_name)
+        title, summary, project_type = summarize_readme(client, text, full_name)
         df.at[idx, "project_title"] = title
         df.at[idx, "summary"] = summary
+        df.at[idx, "project_type"] = project_type
         count += 1
 
         if count % CHECKPOINT_EVERY == 0:

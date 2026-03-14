@@ -279,7 +279,8 @@ def main():
     hover_text_html_template = (
         '<b>{project_title}</b><br>'
         '{full_name}<br>'
-        '{hover_meta}<br><br>'
+        '{hover_meta}<br>'
+        '<i>{project_type}</i><br><br>'
         '{summary}'
     )
 
@@ -331,6 +332,14 @@ def main():
     family_palette = glasbey.create_palette(palette_size=len(unique_families))
     family_color_mapping = dict(zip(unique_families, family_palette))
 
+    # 4. Project Type (categorical, from LLM extraction)
+    has_project_type = "project_type" in df.columns
+    if has_project_type:
+        project_types = df["project_type"].fillna("Other").replace("", "Other").values
+        unique_types = sorted(set(project_types))
+        type_palette = glasbey.create_palette(palette_size=len(unique_types))
+        type_color_mapping = dict(zip(unique_types, type_palette))
+
     # 5. Repo Created Date (datetime, for continuous colormap)
     now = datetime.now(tz=timezone.utc)
     created_dates = pd.to_datetime(df["created_at"], utc=True).values
@@ -368,9 +377,11 @@ def main():
         for fn, title, lang, summ in zip(df["full_name"], project_titles, df["language"].fillna(""), summaries)
     ]
 
+    project_type_values = project_types if has_project_type else ["Other"] * len(df)
     extra_data = pd.DataFrame({
         "full_name": df["full_name"].values,
         "project_title": project_titles,
+        "project_type": project_type_values,
         "summary": summaries,
         "hover_meta": hover_meta,
         "stars": df["stargazers_count"].astype(str).values,
@@ -398,6 +409,16 @@ def main():
                 "color_mapping": family_color_mapping,
             },
     ]
+
+    # Project Type (categorical)
+    if has_project_type:
+        all_rawdata.append(project_types)
+        all_metadata.append({
+            "field": "project_type",
+            "description": "Project Type",
+            "kind": "categorical",
+            "color_mapping": type_color_mapping,
+        })
 
     # Owner Type (categorical)
     if "owner_type" in df.columns:
