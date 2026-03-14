@@ -444,7 +444,7 @@ def main():
             "field": "open_issues",
             "description": "Open Issues (log10)",
             "kind": "continuous",
-            "cmap": "OrRd",
+            "cmap": "BuPu",
         })
 
     fig = datamapplot.create_interactive_plot(
