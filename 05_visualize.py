@@ -1,5 +1,7 @@
 """Generate interactive DataMapPlot visualization."""
 
+import base64
+import io
 import json
 import re
 from datetime import datetime, timezone
@@ -7,12 +9,18 @@ from pathlib import Path
 
 import datamapplot
 import glasbey
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from datamapplot.edge_bundling import bundle_edges
+from datamapplot.interactive_rendering import compute_percentile_bounds
+from matplotlib.collections import LineCollection
+from sklearn.neighbors import NearestNeighbors
 
 from config import (
     DOCS_INDEX_HTML,
     DOCS_METHODOLOGY_HTML,
+    EMBEDDINGS_NPZ,
     GITHUB_MAP_HTML,
     LABELS_PARQUET,
     METHODOLOGY_HTML,
@@ -22,9 +30,82 @@ from config import (
 
 FILTER_PANEL_HTML = Path(__file__).parent / "filter_panel.html"
 
+
+def _build_edge_bundle(coords, embeddings):
+    """Build KNN edge bundle from embeddings and return background_image kwargs."""
+    print("Building edge bundle...")
+    n = len(coords)
+
+    # 1. Build KNN graph in 512D embedding space
+    nn = NearestNeighbors(n_neighbors=15, metric="cosine", algorithm="brute", n_jobs=-1)
+    nn.fit(embeddings)
+    _, nn_indices = nn.kneighbors(embeddings)
+
+    source = np.repeat(np.arange(n), 15)
+    target = nn_indices.flatten()
+    mask = source != target
+    edges = pd.DataFrame({"source": source[mask], "target": target[mask]})
+
+    # 2. Transform coordinates to DataMapPlot's internal space (centered, scale=30)
+    raw_bounds = compute_percentile_bounds(coords)
+    raw_w = raw_bounds[1] - raw_bounds[0]
+    raw_h = raw_bounds[3] - raw_bounds[2]
+    raw_scale = max(raw_w, raw_h)
+    coords_center = coords.mean(axis=0)
+    dmp_scale = 30.0 / raw_scale
+    transformed_coords = dmp_scale * (coords - coords_center)
+
+    # 3. Bundle edges
+    color_list = ["#888888"] * n
+    segments, seg_colors = bundle_edges(transformed_coords, color_list, edges=edges)
+
+    # 4. Compute image bounds with 5% padding
+    pad_frac = 0.05
+    tc = transformed_coords
+    x_range = tc[:, 0].max() - tc[:, 0].min()
+    y_range = tc[:, 1].max() - tc[:, 1].min()
+    bounds = [
+        float(tc[:, 0].min() - pad_frac * x_range),
+        float(tc[:, 1].min() - pad_frac * y_range),
+        float(tc[:, 0].max() + pad_frac * x_range),
+        float(tc[:, 1].max() + pad_frac * y_range),
+    ]
+
+    # 5. Render to transparent PNG
+    fig_w = 20
+    fig_h = fig_w * (bounds[3] - bounds[1]) / (bounds[2] - bounds[0])
+    fig = plt.figure(figsize=(fig_w, fig_h), dpi=100)
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.set_xlim(bounds[0], bounds[2])
+    ax.set_ylim(bounds[1], bounds[3])
+    ax.axis("off")
+    fig.patch.set_alpha(0)
+    ax.patch.set_alpha(0)
+
+    lines = np.stack([segments[:, :2], segments[:, 2:]], axis=1)
+    lc = LineCollection(lines, colors=seg_colors, linewidths=0.3, alpha=0.3)
+    ax.add_collection(lc)
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", transparent=True, dpi=100)
+    plt.close(fig)
+    buf.seek(0)
+    data_uri = f"data:image/png;base64,{base64.b64encode(buf.getvalue()).decode()}"
+
+    print("Edge bundle complete.")
+    return {"background_image": data_uri, "background_image_bounds": bounds}
+
 # Custom JS injected at render time: hide boundaries immediately after async
 # creation, and patch pointLayer.clone to preserve radiusMinPixels/radiusMaxPixels.
 CUSTOM_JS = """
+// Hide edge-bundle image layer initially (synchronous — exists at custom_js time)
+if (datamap.imageLayer) {
+    var idx = datamap.layers.indexOf(datamap.imageLayer);
+    datamap.imageLayer = datamap.imageLayer.clone({visible: false});
+    datamap.layers[idx] = datamap.imageLayer;
+    datamap.deckgl.setProps({layers: [].concat(datamap.layers)});
+}
+
 // Monkey-patch addBoundaries so boundaries start hidden
 (function() {
   var origAddBoundaries = datamap.addBoundaries.bind(datamap);
@@ -65,6 +146,10 @@ def main():
     df = pd.read_parquet(REPOS_PARQUET)
     labels_df = pd.read_parquet(LABELS_PARQUET)
     coords = np.load(UMAP_COORDS_NPZ)["coords"]
+    embeddings = np.load(EMBEDDINGS_NPZ)["embeddings"]
+
+    # Build edge bundle background image
+    edge_bundle_kwargs = _build_edge_bundle(coords, embeddings)
 
     # Collect all label layers (label_layer_0 = coarsest, label_layer_1, ... = finer)
     label_columns = sorted(c for c in labels_df.columns if c.startswith("label_layer_"))
@@ -269,6 +354,7 @@ def main():
         cluster_boundary_polygons=True,
         cluster_boundary_line_width=1.0,
         darkmode=False,
+        **edge_bundle_kwargs,
     )
     fig.save(str(GITHUB_MAP_HTML))
     print(f"Saved interactive map to {GITHUB_MAP_HTML}")
