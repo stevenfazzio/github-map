@@ -141,6 +141,110 @@ if (datamap.imageLayer) {
 """
 
 
+def _build_point_labels_js():
+    """Return JS IIFE that adds per-repo text labels visible on zoom."""
+    return """\
+(function() {
+  window.addEventListener('datamapReady', function(e) {
+    var datamap = e.detail.datamap;
+    var hoverData = e.detail.hoverData;
+    if (!datamap.pointLayer) return;
+    var positions = datamap.pointLayer.props.data.attributes.getPosition.value;
+    var titles = hoverData.hover_text;
+    var n = titles.length;
+    var allData = [];
+    for (var i = 0; i < n; i++) {
+      var t = titles[i];
+      if (!t) continue;
+      t = t.split('\\n')[0];
+      allData.push({ text: t, position: [positions[i * 2], positions[i * 2 + 1]], idx: i });
+    }
+    var visibleData = allData;
+    var charSet = new Set();
+    for (var i = 0; i < allData.length; i++) {
+      var text = allData[i].text;
+      for (var j = 0; j < text.length; j++) charSet.add(text[j]);
+    }
+    var characterSet = Array.from(charSet);
+    var initialZoom = datamap.deckgl.props.initialViewState.zoom;
+    var fadeStart = initialZoom + 4;
+    var fadeEnd = initialZoom + 6;
+    var lastStep = -1;
+    var enabled = true;
+    function buildLayer(opacity) {
+      return new deck.TextLayer({
+        id: 'pointLabelLayer',
+        data: visibleData,
+        getText: function(d) { return d.text; },
+        getPosition: function(d) { return d.position; },
+        getSize: 0.08,
+        sizeMinPixels: 0,
+        sizeMaxPixels: 14,
+        sizeUnits: 'common',
+        getColor: [0, 0, 0],
+        fontWeight: 400,
+        fontFamily: 'Roboto, Arial, sans-serif',
+        characterSet: characterSet,
+        background: false,
+        wordBreak: 'break-word',
+        maxWidth: 24,
+        getPixelOffset: [0, 10],
+        opacity: opacity,
+        parameters: { depthTest: false }
+      });
+    }
+    var dpIdx = datamap.layers.findIndex(function(l) { return l.id === 'dataPointLayer'; });
+    if (dpIdx >= 0) {
+      datamap.layers.splice(dpIdx + 1, 0, buildLayer(0));
+    } else {
+      datamap.layers.push(buildLayer(0));
+    }
+    datamap.deckgl.setProps({ layers: [].concat(datamap.layers) });
+    function updateOpacity(opacity) {
+      var idx = datamap.layers.findIndex(function(l) { return l.id === 'pointLabelLayer'; });
+      if (idx === -1) return;
+      datamap.layers[idx] = buildLayer(opacity);
+      datamap.deckgl.setProps({ layers: [].concat(datamap.layers) });
+    }
+    function currentOpacity() {
+      var vs = datamap.deckgl.props.viewState || datamap.deckgl.props.initialViewState;
+      var zoom = vs ? vs.zoom : initialZoom;
+      var t = Math.min(1, Math.max(0, (zoom - fadeStart) / (fadeEnd - fadeStart)));
+      return Math.round(t * 20) / 20;
+    }
+    datamap._pointLabels = {
+      setEnabled: function(v) {
+        enabled = v;
+        if (!v) { lastStep = -1; updateOpacity(0); }
+        else { var op = currentOpacity(); lastStep = Math.round(op * 20); updateOpacity(op); }
+      },
+      updateVisibility: function(selectedSet) {
+        if (!selectedSet) { visibleData = allData; }
+        else { visibleData = allData.filter(function(d) { return selectedSet.has(d.idx); }); }
+        if (enabled) updateOpacity(currentOpacity());
+      }
+    };
+    var origHandler = datamap.deckgl.props.onViewStateChange || null;
+    datamap.deckgl.setProps({
+      onViewStateChange: function(params) {
+        var result;
+        if (origHandler) result = origHandler(params);
+        if (!enabled) return result;
+        var zoom = params.viewState.zoom;
+        var t = Math.min(1, Math.max(0, (zoom - fadeStart) / (fadeEnd - fadeStart)));
+        var step = Math.round(t * 20);
+        if (step !== lastStep) {
+          lastStep = step;
+          var opacity = step / 20;
+          requestAnimationFrame(function() { updateOpacity(opacity); });
+        }
+        return result;
+      }
+    });
+  });
+})();"""
+
+
 def main():
     # Load data
     df = pd.read_parquet(REPOS_PARQUET)
@@ -465,7 +569,8 @@ def _inject_filters(html_path, df, languages):
         html = html[:insert_pos] + "\n      " + section_map["html"] + "\n" + html[insert_pos:]
 
     # 8. Inject JS before </html>
-    html = html.replace("</html>", js_section + "\n</html>", 1)
+    point_labels_js = "<script>" + _build_point_labels_js() + "</script>"
+    html = html.replace("</html>", js_section + "\n" + point_labels_js + "\n</html>", 1)
 
     Path(html_path).write_text(html)
 
