@@ -266,22 +266,27 @@ def main():
     has_summary = "summary" in df.columns
     has_title = "project_title" in df.columns
 
-    # Build per-row metadata line for hover card
-    hover_meta = []
-    for _, row in df.iterrows():
-        stars = f"⭐ {row['stargazers_count']:,}"
-        forks = f" | 🍴 {row['fork_count']:,}" if has_forks else ""
-        lang = row["language"] or "N/A"
-        hover_meta.append(f"{stars}{forks} | {lang}")
+    # Build per-row metadata fields for hover card
+    hover_stars = [f"{row['stargazers_count']:,}" for _, row in df.iterrows()]
+    hover_forks = [f"{row['fork_count']:,}" if has_forks else "" for _, row in df.iterrows()]
+    hover_langs = [(row["language"] or "") for _, row in df.iterrows()]
 
     hover_text = df["full_name"].tolist()  # required by DataMapPlot
 
     hover_text_html_template = (
-        '<b>{project_title}</b><br>'
-        '{full_name}<br>'
-        '{hover_meta}<br>'
-        '<i>{project_type}</i><br><br>'
-        '{summary}'
+        '<div class="hc">'
+        '  <div class="hc-header">'
+        '    <div class="hc-title">{project_title}</div>'
+        '    <div class="hc-repo">{full_name}</div>'
+        '  </div>'
+        '  <div class="hc-stats">'
+        '    <span class="hc-chip">★ {hover_stars}</span>'
+        '    <span class="hc-chip">⑂ {hover_forks}</span>'
+        '    <span class="hc-chip hc-lang">{hover_lang}</span>'
+        '  </div>'
+        '  <div class="hc-type">{project_type}</div>'
+        '  <div class="hc-summary">{summary}</div>'
+        '</div>'
     )
 
     # ── Marker sizes (sqrt of stars) ─────────────────────────────────────────
@@ -383,7 +388,9 @@ def main():
         "project_title": project_titles,
         "project_type": project_type_values,
         "summary": summaries,
-        "hover_meta": hover_meta,
+        "hover_stars": hover_stars,
+        "hover_forks": hover_forks,
+        "hover_lang": hover_langs,
         "stars": df["stargazers_count"].astype(str).values,
         "created_year": created_years.astype(str),
         "days_since_push": days_since_push.astype(int).astype(str) if "pushed_at" in df.columns else "0",
@@ -478,6 +485,99 @@ def main():
             "cmap": "BuPu",
         })
 
+    tooltip_css = """
+        font-family: 'DM Sans', system-ui, sans-serif;
+        font-size: 13px;
+        font-weight: 400;
+        color: #1a1a2e !important;
+        background: linear-gradient(135deg, #ffffffe8, #f8f9fee8) !important;
+        border: 1px solid rgba(0, 0, 0, 0.06);
+        border-radius: 10px;
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04);
+        max-width: 340px;
+        padding: 0 !important;
+        overflow: hidden;
+    """
+
+    custom_css = """
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+    .hc {
+        padding: 14px 16px 12px;
+    }
+    .hc-header {
+        margin-bottom: 10px;
+    }
+    .hc-title {
+        font-weight: 600;
+        font-size: 15px;
+        color: #0d1117;
+        line-height: 1.3;
+        letter-spacing: -0.01em;
+    }
+    .hc-repo {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11.5px;
+        color: #57606a;
+        margin-top: 2px;
+        letter-spacing: -0.02em;
+    }
+    .hc-stats {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-bottom: 10px;
+    }
+    .hc-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        padding: 3px 8px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 500;
+        font-family: 'JetBrains Mono', monospace;
+        background: rgba(0, 0, 0, 0.04);
+        color: #424a53;
+        white-space: nowrap;
+    }
+    .hc-chip:empty {
+        display: none;
+    }
+    .hc-lang {
+        background: transparent;
+        border: 1px solid rgba(0, 0, 0, 0.15);
+        color: #57606a;
+    }
+    .hc-type {
+        font-size: 11px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #8b6cc1;
+        margin-bottom: 8px;
+    }
+    .hc-type:empty {
+        display: none;
+    }
+    .hc-summary {
+        font-size: 12.5px;
+        line-height: 1.5;
+        color: #3d4752;
+        display: -webkit-box;
+        -webkit-line-clamp: 10;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        border-top: 1px solid rgba(0, 0, 0, 0.06);
+        padding-top: 8px;
+    }
+    .hc-summary:empty {
+        display: none;
+    }
+    """
+
     fig = datamapplot.create_interactive_plot(
         coords,
         *topic_name_vectors,
@@ -493,6 +593,8 @@ def main():
         enable_search=True,
         search_field="search_text",
         custom_js=CUSTOM_JS,
+        custom_css=custom_css,
+        tooltip_css=tooltip_css,
         cluster_boundary_polygons=True,
         cluster_boundary_line_width=1.0,
         darkmode=False,
