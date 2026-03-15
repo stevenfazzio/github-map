@@ -165,6 +165,20 @@
   width: auto;
   height: auto;
 }
+.filter-group-actions {
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 400;
+  color: #999;
+}
+.filter-group-actions a {
+  color: #0d9488;
+  cursor: pointer;
+  text-decoration: none;
+}
+.filter-group-actions a:hover {
+  text-decoration: underline;
+}
 .filter-section-divider {
   font-family: 'IBM Plex Sans', system-ui, sans-serif;
   font-size: 11px;
@@ -458,7 +472,9 @@
       const group = document.createElement('div');
       group.className = 'filter-group';
 
-      let html = `<div class="filter-group-label">${label}</div><div class="filter-checkbox-list">`;
+      const allId = `${filterId}-select-all`;
+      const noneId = `${filterId}-select-none`;
+      let html = `<div class="filter-group-label"><span>${label}</span><span class="filter-group-actions"><a id="${allId}">All</a> / <a id="${noneId}">None</a></span></div><div class="filter-checkbox-list">`;
       for (const val of values) {
         const id = `${filterId}-${val.replace(/\s+/g, '-')}`;
         html += `<label class="filter-checkbox-item"><input type="checkbox" id="${id}" value="${val}" checked> ${val}</label>`;
@@ -493,6 +509,15 @@
       };
 
       checkboxes.forEach(cb => cb.addEventListener('change', onChange));
+
+      document.getElementById(allId).addEventListener('click', () => {
+        checkboxes.forEach(cb => { cb.checked = true; });
+        onChange();
+      });
+      document.getElementById(noneId).addEventListener('click', () => {
+        checkboxes.forEach(cb => { cb.checked = false; });
+        onChange();
+      });
     }
 
     setupLegendSync() {
