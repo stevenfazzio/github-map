@@ -279,6 +279,7 @@ def main():
         '    <div class="hc-title">{project_title}</div>'
         '    <div class="hc-repo">{full_name}</div>'
         '  </div>'
+        '  <div class="hc-tagline">{tagline}</div>'
         '  <div class="hc-stats">'
         '    <span class="hc-chip">★ {hover_stars}</span>'
         '    <span class="hc-chip">⑂ {hover_forks}</span>'
@@ -376,10 +377,11 @@ def main():
     # Extra point data for filters (all as strings for DataMapPlot serialization)
     created_years = pd.to_datetime(df["created_at"], utc=True).dt.year.values
     summaries = df["summary"].fillna("").values if has_summary else [""] * len(df)
+    taglines = df["tagline"].fillna("").values if "tagline" in df.columns else [""] * len(df)
     project_titles = df["project_title"].fillna("").values if has_title else df["full_name"].str.split("/").str[1].values
     search_text = [
-        f"{fn} {title} {lang or ''} {summ}"
-        for fn, title, lang, summ in zip(df["full_name"], project_titles, df["language"].fillna(""), summaries)
+        f"{fn} {title} {lang or ''} {tag} {summ}"
+        for fn, title, lang, tag, summ in zip(df["full_name"], project_titles, df["language"].fillna(""), taglines, summaries)
     ]
 
     project_type_values = project_types if has_project_type else ["Other"] * len(df)
@@ -387,6 +389,7 @@ def main():
         "full_name": df["full_name"].values,
         "project_title": project_titles,
         "project_type": project_type_values,
+        "tagline": taglines,
         "summary": summaries,
         "hover_stars": hover_stars,
         "hover_forks": hover_forks,
@@ -523,6 +526,17 @@ def main():
         color: #57606a;
         margin-top: 2px;
         letter-spacing: -0.02em;
+    }
+    .hc-tagline {
+        font-size: 13px;
+        font-style: italic;
+        font-weight: 400;
+        color: #656d76;
+        line-height: 1.4;
+        margin-bottom: 10px;
+    }
+    .hc-tagline:empty {
+        display: none;
     }
     .hc-stats {
         display: flex;

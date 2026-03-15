@@ -17,6 +17,7 @@ pip install -e '.[bigquery]'          # (optional) for 00_enumerate_repos.py
 python 00_enumerate_repos.py          # BigQuery → data/candidates.csv (or use committed fallback)
 python 01_fetch_repos.py              # GraphQL direct lookups → repos.parquet
 python 01b_summarize_readmes.py       # Add LLM summaries via Claude Haiku → updates repos.parquet
+python 01c_generate_taglines.py       # Add ≤10-word taglines via Claude Haiku → updates repos.parquet
 python 02_embed_readmes.py            # Embed READMEs via Cohere → embeddings.npz
 python 03_reduce_umap.py              # UMAP 512-dim → 2D → umap_coords.npz
 python 04_label_topics.py             # Toponymy + Claude Sonnet topic labels → labels.parquet
