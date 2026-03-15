@@ -41,16 +41,28 @@ CHECKPOINT_EVERY = 100
 SLEEP_BETWEEN_CALLS = 0.1
 
 
+MAX_RETRIES = 5
+
+
 def summarize_readme(
     client: anthropic.Anthropic, text: str, full_name: str
 ) -> tuple[str, str, str]:
     """Return (project_title, summary, project_type) for a repo README."""
-    response = client.messages.create(
-        model=ANTHROPIC_MODEL_SUMMARIZE,
-        max_tokens=250,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": text[:MAX_README_CHARS]}],
-    )
+    for attempt in range(MAX_RETRIES):
+        try:
+            response = client.messages.create(
+                model=ANTHROPIC_MODEL_SUMMARIZE,
+                max_tokens=250,
+                system=SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": text[:MAX_README_CHARS]}],
+            )
+            break
+        except (anthropic.APIStatusError, anthropic.APIConnectionError) as e:
+            if attempt == MAX_RETRIES - 1:
+                raise
+            wait = min(2 ** attempt * 5, 60)
+            print(f"\n  API error ({e}), retrying in {wait}s...")
+            time.sleep(wait)
     raw = response.content[0].text.strip()
 
     # Strip markdown fencing if present
