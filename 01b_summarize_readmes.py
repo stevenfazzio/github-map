@@ -1,15 +1,22 @@
 """Generate short LLM summaries of repo READMEs using Claude Haiku."""
 
+import asyncio
 import json
+import os
 import re
 import shutil
-import time
+import tempfile
 
 import anthropic
 import pandas as pd
 from tqdm import tqdm
 
-from config import ANTHROPIC_API_KEY, ANTHROPIC_MODEL_SUMMARIZE, REPOS_PARQUET
+from config import (
+    ANTHROPIC_API_KEY,
+    ANTHROPIC_CONCURRENCY,
+    ANTHROPIC_MODEL_SUMMARIZE,
+    REPOS_PARQUET,
+)
 
 PROJECT_TYPES = [
     "Library",
@@ -38,31 +45,57 @@ SYSTEM_PROMPT = (
 )
 MAX_README_CHARS = 4_000
 CHECKPOINT_EVERY = 100
-SLEEP_BETWEEN_CALLS = 0.1
-
 
 MAX_RETRIES = 5
 
 
-def summarize_readme(
-    client: anthropic.Anthropic, text: str, full_name: str
+def safe_write_parquet(df, path):
+    """Atomically write a parquet file via tmp + verify + rename."""
+    tmp_fd, tmp_path = tempfile.mkstemp(
+        dir=os.path.dirname(path), suffix=".parquet.tmp"
+    )
+    os.close(tmp_fd)
+    try:
+        df.to_parquet(tmp_path, index=False)
+        verify = pd.read_parquet(tmp_path)
+        assert len(verify) == len(df)
+        os.replace(tmp_path, str(path))
+    except Exception:
+        os.unlink(tmp_path)
+        raise
+
+
+async def summarize_readme(
+    client: anthropic.AsyncAnthropic,
+    semaphore: asyncio.Semaphore,
+    text: str,
+    full_name: str,
+    pbar: tqdm,
 ) -> tuple[str, str, str]:
     """Return (project_title, summary, project_type) for a repo README."""
-    for attempt in range(MAX_RETRIES):
-        try:
-            response = client.messages.create(
-                model=ANTHROPIC_MODEL_SUMMARIZE,
-                max_tokens=250,
-                system=SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": text[:MAX_README_CHARS]}],
-            )
-            break
-        except (anthropic.APIStatusError, anthropic.APIConnectionError) as e:
-            if attempt == MAX_RETRIES - 1:
-                raise
-            wait = min(2 ** attempt * 5, 60)
-            print(f"\n  API error ({e}), retrying in {wait}s...")
-            time.sleep(wait)
+    async with semaphore:
+        for attempt in range(MAX_RETRIES):
+            try:
+                response = await client.messages.create(
+                    model=ANTHROPIC_MODEL_SUMMARIZE,
+                    max_tokens=250,
+                    system=SYSTEM_PROMPT,
+                    messages=[{"role": "user", "content": text[:MAX_README_CHARS]}],
+                )
+                break
+            except anthropic.RateLimitError as e:
+                wait = min(2**attempt * 5, 60)
+                print(f"\n  Rate limit ({e}), retrying in {wait}s...")
+                await asyncio.sleep(wait)
+            except (anthropic.APIStatusError, anthropic.APIConnectionError) as e:
+                if attempt == MAX_RETRIES - 1:
+                    raise
+                wait = min(2**attempt * 5, 60)
+                print(f"\n  API error ({e}), retrying in {wait}s...")
+                await asyncio.sleep(wait)
+
+    pbar.update(1)
+
     raw = response.content[0].text.strip()
 
     # Strip markdown fencing if present
@@ -89,7 +122,7 @@ def summarize_readme(
     return title, summary, project_type
 
 
-def main():
+async def main():
     df = pd.read_parquet(REPOS_PARQUET)
 
     if "summary" not in df.columns:
@@ -112,37 +145,66 @@ def main():
     print(f"Backed up {REPOS_PARQUET} → {backup_path}")
 
     print(f"Summarizing {total} repos...")
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+    semaphore = asyncio.Semaphore(ANTHROPIC_CONCURRENCY)
+
+    indices = df.index[needs_summary].tolist()
+    pbar = tqdm(total=total)
     count = 0
 
-    for idx in tqdm(df.index[needs_summary], total=total):
-        readme = df.at[idx, "readme"] if pd.notna(df.at[idx, "readme"]) else ""
-        description = df.at[idx, "description"] if pd.notna(df.at[idx, "description"]) else ""
-        full_name = df.at[idx, "full_name"]
+    for chunk_start in range(0, len(indices), CHECKPOINT_EVERY):
+        chunk_indices = indices[chunk_start : chunk_start + CHECKPOINT_EVERY]
+        tasks = []
+        skip_indices = []
 
-        text = readme.strip() or description.strip()
-        if not text:
-            df.at[idx, "project_title"] = full_name.split("/")[1]
-            df.at[idx, "summary"] = ""
-            df.at[idx, "project_type"] = "Other"
-            count += 1
-            continue
+        for idx in chunk_indices:
+            readme = df.at[idx, "readme"] if pd.notna(df.at[idx, "readme"]) else ""
+            description = (
+                df.at[idx, "description"]
+                if pd.notna(df.at[idx, "description"])
+                else ""
+            )
+            full_name = df.at[idx, "full_name"]
 
-        title, summary, project_type = summarize_readme(client, text, full_name)
-        df.at[idx, "project_title"] = title
-        df.at[idx, "summary"] = summary
-        df.at[idx, "project_type"] = project_type
-        count += 1
+            text = readme.strip() or description.strip()
+            if not text:
+                df.at[idx, "project_title"] = full_name.split("/")[1]
+                df.at[idx, "summary"] = ""
+                df.at[idx, "project_type"] = "Other"
+                skip_indices.append(idx)
+                pbar.update(1)
+                continue
 
-        if count % CHECKPOINT_EVERY == 0:
-            df.to_parquet(REPOS_PARQUET, index=False)
-            print(f"  Checkpoint saved at {count}/{total}")
+            tasks.append((idx, full_name, text))
 
-        time.sleep(SLEEP_BETWEEN_CALLS)
+        async def _process(idx, full_name, text):
+            try:
+                return idx, await summarize_readme(
+                    client, semaphore, text, full_name, pbar
+                )
+            except Exception as e:
+                print(f"\n  Error summarizing {full_name}: {e}")
+                pbar.update(1)
+                return idx, None
 
-    df.to_parquet(REPOS_PARQUET, index=False)
+        results = await asyncio.gather(
+            *[_process(idx, fn, txt) for idx, fn, txt in tasks]
+        )
+
+        for idx, result in results:
+            if result is not None:
+                title, summary, project_type = result
+                df.at[idx, "project_title"] = title
+                df.at[idx, "summary"] = summary
+                df.at[idx, "project_type"] = project_type
+
+        count += len(chunk_indices)
+        safe_write_parquet(df, REPOS_PARQUET)
+        print(f"  Checkpoint saved at {count}/{total}")
+
+    pbar.close()
     print(f"Done. Saved {count} summaries to {REPOS_PARQUET}")
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
