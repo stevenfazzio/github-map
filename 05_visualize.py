@@ -277,7 +277,7 @@ def main():
         '<div class="hc">'
         '  <div class="hc-header">'
         '    <div class="hc-title">{project_title}</div>'
-        '    <div class="hc-repo">{full_name}</div>'
+        '    <div class="hc-repo">{owner}</div>'
         '  </div>'
         '  <div class="hc-tagline">{tagline}</div>'
         '  <div class="hc-stats">'
@@ -387,6 +387,7 @@ def main():
     project_type_values = project_types if has_project_type else ["Other"] * len(df)
     extra_data = pd.DataFrame({
         "full_name": df["full_name"].values,
+        "owner": df["full_name"].str.split("/").str[0].values,
         "project_title": project_titles,
         "project_type": project_type_values,
         "tagline": taglines,
