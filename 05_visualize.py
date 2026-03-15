@@ -759,6 +759,14 @@ def _inject_filters(html_path, df, languages):
         },
         "languages": sorted_language_list,
         "activityStatuses": ["Active", "Inactive", "Archived"],
+        "colormapFieldToFilterId": {
+            "language": "filter-language",
+            "activity_status": "filter-activity-status",
+        },
+        "filterIdToColormapField": {
+            "filter-language": "language",
+            "filter-activity-status": "activity_status",
+        },
     }
 
     # 4. Read and split template by <!-- SECTION: xxx --> markers

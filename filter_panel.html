@@ -279,6 +279,9 @@
       this.config = config;
       this.filters = {};
       this.totalCount = config.totalCount;
+      this.colormapFieldToFilterId = config.colormapFieldToFilterId || {};
+      this.filterIdToColormapField = config.filterIdToColormapField || {};
+      this.patchedLegends = {};
 
       this.container = document.getElementById('filter-controls');
       this.matchCountEl = document.getElementById('filter-match-count');
@@ -344,6 +347,8 @@
         field: 'activity_status',
         values: config.activityStatuses,
       });
+
+      this.setupLegendSync();
 
       // Toggle panel
       const header = document.getElementById('filter-header');
@@ -483,10 +488,103 @@
           }
           this.datamap.addSelection(indices, filterId);
         }
+        this.syncLegendOpacity(filterId);
         this.updateMatchCount();
       };
 
       checkboxes.forEach(cb => cb.addEventListener('change', onChange));
+    }
+
+    setupLegendSync() {
+      const colorSelector = this.datamap.colorSelector;
+      if (!colorSelector || !colorSelector.legends) return;
+
+      for (const [field, filterId] of Object.entries(this.colormapFieldToFilterId)) {
+        this.patchLegendContainer(field, filterId, colorSelector);
+      }
+
+      // Monkey-patch handleColorMapSelection to sync legend on colormap switch
+      const origHandler = colorSelector.handleColorMapSelection.bind(colorSelector);
+      const self = this;
+      colorSelector.handleColorMapSelection = function(field) {
+        origHandler(field);
+        self.onColormapChanged(field);
+      };
+    }
+
+    patchLegendContainer(field, filterId, colorSelector) {
+      const origContainer = colorSelector.legends[field];
+      if (!origContainer) return;
+
+      const newContainer = origContainer.cloneNode(true);
+      origContainer.parentNode.replaceChild(newContainer, origContainer);
+      colorSelector.legends[field] = newContainer;
+
+      const items = newContainer.querySelectorAll('.legend-item');
+      this.patchedLegends[field] = { container: newContainer, items };
+
+      const self = this;
+      newContainer.addEventListener('click', function(e) {
+        const legendItem = e.target.closest('.legend-item');
+        if (!legendItem) return;
+        const labelEl = legendItem.querySelector('.legend-label');
+        if (!labelEl) return;
+        const category = labelEl.textContent.trim();
+
+        const filter = self.filters[filterId];
+        if (!filter || filter.type !== 'checkbox') return;
+
+        let matchingCb = null;
+        filter.checkboxes.forEach(cb => {
+          if (cb.value === category) matchingCb = cb;
+        });
+        if (!matchingCb) return;
+
+        // Replicate original legend behavior:
+        // If all are checked, "solo" the clicked item (uncheck all others).
+        // If some are already filtered, toggle the clicked item.
+        const allChecked = Array.from(filter.checkboxes).every(cb => cb.checked);
+        if (allChecked) {
+          filter.checkboxes.forEach(cb => { cb.checked = (cb.value === category); });
+        } else {
+          // If this is the only checked item and we're about to uncheck it, restore all
+          const checkedCbs = Array.from(filter.checkboxes).filter(cb => cb.checked);
+          if (checkedCbs.length === 1 && checkedCbs[0].value === category) {
+            filter.checkboxes.forEach(cb => { cb.checked = true; });
+          } else {
+            matchingCb.checked = !matchingCb.checked;
+          }
+        }
+        // Fire change on one checkbox to trigger the shared onChange handler
+        matchingCb.dispatchEvent(new Event('change'));
+      });
+
+      // Initial sync
+      this.syncLegendOpacity(filterId);
+    }
+
+    syncLegendOpacity(filterId) {
+      const field = this.filterIdToColormapField[filterId];
+      if (!field || !this.patchedLegends[field]) return;
+
+      const filter = this.filters[filterId];
+      if (!filter || filter.type !== 'checkbox') return;
+
+      const checked = new Set();
+      filter.checkboxes.forEach(cb => { if (cb.checked) checked.add(cb.value); });
+      const allChecked = checked.size === filter.values.length;
+
+      this.patchedLegends[field].items.forEach(item => {
+        const labelEl = item.querySelector('.legend-label');
+        if (!labelEl) return;
+        const label = labelEl.textContent.trim();
+        item.style.opacity = (allChecked || checked.has(label)) ? 1 : 0.25;
+      });
+    }
+
+    onColormapChanged(field) {
+      const filterId = this.colormapFieldToFilterId[field];
+      if (filterId) this.syncLegendOpacity(filterId);
     }
 
     updateFilterBodyHeight() {
@@ -524,6 +622,11 @@
         }
         this.datamap.removeSelection(filterId);
       }
+      // Reset legend opacities
+      for (const legend of Object.values(this.patchedLegends)) {
+        legend.items.forEach(item => { item.style.opacity = 1; });
+      }
+
       this.updateMatchCount();
 
       // Reset display toggles to defaults
