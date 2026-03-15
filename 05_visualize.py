@@ -109,38 +109,6 @@ if (datamap.imageLayer) {
     datamap.deckgl.setProps({layers: [].concat(datamap.layers)});
 }
 
-// Monkey-patch addBoundaries so boundaries start hidden
-(function() {
-  var origAddBoundaries = datamap.addBoundaries.bind(datamap);
-  datamap.addBoundaries = function() {
-    origAddBoundaries.apply(this, arguments);
-    // Hide the boundary layer immediately
-    if (datamap.boundaryLayer) {
-      var idx = datamap.layers.indexOf(datamap.boundaryLayer);
-      if (idx !== -1) {
-        var replacement = new deck.PolygonLayer({
-          id: 'boundaryLayer',
-          data: datamap.boundaryLayer.props.data,
-          stroked: true,
-          filled: false,
-          getLineColor: function(d) { return [d.r, d.g, d.b, d.a]; },
-          getPolygon: function(d) { return d.polygon; },
-          lineWidthUnits: 'common',
-          getLineWidth: function(d) { return d.size * d.size; },
-          lineWidthScale: datamap.clusterBoundaryLineWidth * 5e-5,
-          lineJointRounded: true,
-          lineWidthMaxPixels: 4,
-          lineWidthMinPixels: 0.0,
-          parameters: { depthTest: false },
-          visible: false,
-        });
-        datamap.layers[idx] = replacement;
-        datamap.boundaryLayer = replacement;
-        datamap.deckgl.setProps({ layers: [].concat(datamap.layers) });
-      }
-    }
-  };
-})();
 """
 
 
@@ -670,8 +638,6 @@ def main():
         custom_js=CUSTOM_JS,
         custom_css=custom_css,
         tooltip_css=tooltip_css,
-        cluster_boundary_polygons=True,
-        cluster_boundary_line_width=1.0,
         font_family="IBM Plex Sans",
         font_weight=700,
         darkmode=False,

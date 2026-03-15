@@ -265,13 +265,6 @@
       </div>
       <div class="filter-toggle-item">
         <label class="filter-toggle-switch">
-          <input type="checkbox" id="boundary-toggle">
-          <span class="slider"></span>
-        </label>
-        <label for="boundary-toggle">Boundaries</label>
-      </div>
-      <div class="filter-toggle-item">
-        <label class="filter-toggle-switch">
           <input type="checkbox" id="edge-graph-toggle">
           <span class="slider"></span>
         </label>
@@ -752,43 +745,6 @@
     });
   }
 
-  // Hide cluster boundary polygons by default; let the user toggle them on.
-  function setupBoundaryToggle(datamap) {
-    const toggle = document.getElementById('boundary-toggle');
-
-    let boundaryData = null;
-
-    function setBoundaryVisible(visible) {
-      if (!datamap.boundaryLayer) return;
-      if (!boundaryData) boundaryData = datamap.boundaryLayer.props.data;
-      const idx = datamap.layers.indexOf(datamap.boundaryLayer);
-      if (idx === -1) return;
-      const replacement = new deck.PolygonLayer({
-        id: 'boundaryLayer',
-        data: boundaryData,
-        stroked: true,
-        filled: false,
-        getLineColor: d => [d.r, d.g, d.b, d.a],
-        getPolygon: d => d.polygon,
-        lineWidthUnits: 'common',
-        getLineWidth: d => d.size * d.size,
-        lineWidthScale: datamap.clusterBoundaryLineWidth * 5e-5,
-        lineJointRounded: true,
-        lineWidthMaxPixels: 4,
-        lineWidthMinPixels: 0.0,
-        parameters: { depthTest: false },
-        visible,
-      });
-      datamap.layers[idx] = replacement;
-      datamap.boundaryLayer = replacement;
-      datamap.deckgl.setProps({ layers: [...datamap.layers] });
-    }
-
-    toggle.addEventListener('change', () => {
-      setBoundaryVisible(toggle.checked);
-    });
-  }
-
   // Toggle edge graph (background image layer) visibility.
   function setupEdgeGraphToggle(datamap) {
     const toggle = document.getElementById('edge-graph-toggle');
@@ -819,7 +775,6 @@
     const { datamap, hoverData } = e.detail;
     patchHighlightPoints(datamap);
     setupLabelToggle(datamap);
-    setupBoundaryToggle(datamap);
     setupEdgeGraphToggle(datamap);
     new FilterPanel(datamap, hoverData, FILTER_CONFIG);
   });
