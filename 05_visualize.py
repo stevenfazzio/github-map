@@ -346,6 +346,14 @@ def main():
         type_palette = glasbey.create_palette(palette_size=len(unique_types))
         type_color_mapping = dict(zip(unique_types, type_palette))
 
+    # 4b. Target Audience (categorical, from LLM extraction)
+    has_target_audience = "target_audience" in df.columns
+    if has_target_audience:
+        audiences = df["target_audience"].fillna("Developers").replace("", "Developers").values
+        unique_audiences = sorted(set(audiences))
+        audience_palette = glasbey.create_palette(palette_size=len(unique_audiences))
+        audience_color_mapping = dict(zip(unique_audiences, audience_palette))
+
     # 5. Repo Created Date (datetime, for continuous colormap)
     now = datetime.now(tz=timezone.utc)
     created_dates = pd.to_datetime(df["created_at"], utc=True).values
@@ -379,9 +387,10 @@ def main():
     summaries = df["summary"].fillna("").values if has_summary else [""] * len(df)
     taglines = df["tagline"].fillna("").values if "tagline" in df.columns else [""] * len(df)
     project_titles = df["project_title"].fillna("").values if has_title else df["full_name"].str.split("/").str[1].values
+    target_audiences = df["target_audience"].fillna("Developers").replace("", "Developers").values if "target_audience" in df.columns else ["Developers"] * len(df)
     search_text = [
-        f"{fn} {title} {lang or ''} {tag} {summ}"
-        for fn, title, lang, tag, summ in zip(df["full_name"], project_titles, df["language"].fillna(""), taglines, summaries)
+        f"{fn} {title} {lang or ''} {tag} {aud} {summ}"
+        for fn, title, lang, tag, aud, summ in zip(df["full_name"], project_titles, df["language"].fillna(""), taglines, target_audiences, summaries)
     ]
 
     project_type_values = project_types if has_project_type else ["Other"] * len(df)
@@ -391,6 +400,7 @@ def main():
         "project_title": project_titles,
         "project_type": project_type_values,
         "tagline": taglines,
+        "target_audience": target_audiences,
         "summary": summaries,
         "hover_stars": hover_stars,
         "hover_forks": hover_forks,
@@ -429,6 +439,16 @@ def main():
             "description": "Project Type",
             "kind": "categorical",
             "color_mapping": type_color_mapping,
+        })
+
+    # Target Audience (categorical)
+    if has_target_audience:
+        all_rawdata.append(audiences)
+        all_metadata.append({
+            "field": "target_audience",
+            "description": "Target Audience",
+            "kind": "categorical",
+            "color_mapping": audience_color_mapping,
         })
 
     # Owner Type (categorical)

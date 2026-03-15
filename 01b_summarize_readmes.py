@@ -1,4 +1,4 @@
-"""Generate short LLM summaries of repo READMEs using Claude Haiku."""
+"""Generate short LLM summaries, taglines, and target audiences for repo READMEs using Claude Haiku."""
 
 import asyncio
 import json
@@ -32,15 +32,43 @@ PROJECT_TYPES = [
     "Other",
 ]
 
+TARGET_AUDIENCES = [
+    "Developers",
+    "Data & ML Engineers",
+    "DevOps & Infrastructure",
+    "System Programmers",
+    "Security Professionals",
+    "End Users",
+    "Learners & Educators",
+    "Researchers",
+]
+
 SYSTEM_PROMPT = (
     "You are given the README of a GitHub repository. "
-    "Return a JSON object with three fields:\n"
+    "Return a JSON object with five fields:\n"
     '- "title": The project\'s display name as presented in the README. '
     "If the README does not mention a project name, return null.\n"
     '- "summary": A 1-2 sentence summary of what the project does.\n'
     '- "project_type": One of: '
     + ", ".join(f'"{t}"' for t in PROJECT_TYPES)
-    + ".\n\n"
+    + ".\n"
+    '- "tagline": A tagline of at most 10 words that plainly describes what '
+    "the project does or is. Write for a technical audience — open-source "
+    "developers, researchers, engineers. Be specific and concrete, not "
+    "marketing-speak. "
+    "Bad: 'Revolutionize your workflow with blazing-fast performance' "
+    "Good: 'Fast key-value store with Redis-compatible API'\n"
+    '- "target_audience": The primary audience for this project. One of: '
+    + ", ".join(f'"{a}"' for a in TARGET_AUDIENCES)
+    + ". Choose the single best fit:\n"
+    '  - "Developers": General software developers (web, mobile, desktop)\n'
+    '  - "Data & ML Engineers": Data scientists, ML/AI practitioners\n'
+    '  - "DevOps & Infrastructure": Cloud, containers, CI/CD, monitoring\n'
+    '  - "System Programmers": OS, embedded, compilers, low-level systems\n'
+    '  - "Security Professionals": Pentesting, crypto, vulnerability research\n'
+    '  - "End Users": Non-developers who use the software directly\n'
+    '  - "Learners & Educators": Students, tutorial followers, course creators\n'
+    '  - "Researchers": Academic or scientific researchers\n\n'
     "Respond with only the JSON object, no markdown fencing."
 )
 MAX_README_CHARS = 4_000
@@ -71,14 +99,14 @@ async def summarize_readme(
     text: str,
     full_name: str,
     pbar: tqdm,
-) -> tuple[str, str, str]:
-    """Return (project_title, summary, project_type) for a repo README."""
+) -> tuple[str, str, str, str, str]:
+    """Return (project_title, summary, project_type, tagline, target_audience) for a repo README."""
     async with semaphore:
         for attempt in range(MAX_RETRIES):
             try:
                 response = await client.messages.create(
                     model=ANTHROPIC_MODEL_SUMMARIZE,
-                    max_tokens=250,
+                    max_tokens=300,
                     system=SYSTEM_PROMPT,
                     messages=[{"role": "user", "content": text[:MAX_README_CHARS]}],
                 )
@@ -111,15 +139,23 @@ async def summarize_readme(
         project_type = obj.get("project_type", "Other")
         if project_type not in PROJECT_TYPES:
             project_type = "Other"
+        tagline = obj.get("tagline", "")
+        # Strip any surrounding quotes from tagline
+        tagline = tagline.strip().strip("'\"")
+        target_audience = obj.get("target_audience", "Developers")
+        if target_audience not in TARGET_AUDIENCES:
+            target_audience = "Developers"
     except (json.JSONDecodeError, AttributeError):
         title = repo_name
         summary = raw
         project_type = "Other"
+        tagline = ""
+        target_audience = "Developers"
 
     # Strip leading markdown headings from summary as safety net
     summary = re.sub(r"^#+\s+.*?\n+", "", summary).strip()
 
-    return title, summary, project_type
+    return title, summary, project_type, tagline, target_audience
 
 
 async def main():
@@ -131,12 +167,20 @@ async def main():
         df["project_title"] = ""
     if "project_type" not in df.columns:
         df["project_type"] = ""
+    if "tagline" not in df.columns:
+        df["tagline"] = ""
+    if "target_audience" not in df.columns:
+        df["target_audience"] = ""
 
-    # Identify rows needing processing (project_title missing)
-    needs_summary = df["project_title"].fillna("").eq("")
-    total = needs_summary.sum()
+    # Identify rows needing processing (any of the 5 fields missing)
+    needs_processing = (
+        df["project_title"].fillna("").eq("")
+        | df["tagline"].fillna("").eq("")
+        | df["target_audience"].fillna("").eq("")
+    )
+    total = needs_processing.sum()
     if total == 0:
-        print("All rows already have project titles.")
+        print("All rows already have project titles, taglines, and target audiences.")
         return
 
     # Back up before modifying
@@ -144,11 +188,11 @@ async def main():
     shutil.copy2(REPOS_PARQUET, backup_path)
     print(f"Backed up {REPOS_PARQUET} → {backup_path}")
 
-    print(f"Summarizing {total} repos...")
+    print(f"Processing {total} repos...")
     client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
     semaphore = asyncio.Semaphore(ANTHROPIC_CONCURRENCY)
 
-    indices = df.index[needs_summary].tolist()
+    indices = df.index[needs_processing].tolist()
     pbar = tqdm(total=total)
     count = 0
 
@@ -171,6 +215,8 @@ async def main():
                 df.at[idx, "project_title"] = full_name.split("/")[1]
                 df.at[idx, "summary"] = ""
                 df.at[idx, "project_type"] = "Other"
+                df.at[idx, "tagline"] = ""
+                df.at[idx, "target_audience"] = "Developers"
                 skip_indices.append(idx)
                 pbar.update(1)
                 continue
@@ -193,17 +239,19 @@ async def main():
 
         for idx, result in results:
             if result is not None:
-                title, summary, project_type = result
+                title, summary, project_type, tagline, target_audience = result
                 df.at[idx, "project_title"] = title
                 df.at[idx, "summary"] = summary
                 df.at[idx, "project_type"] = project_type
+                df.at[idx, "tagline"] = tagline
+                df.at[idx, "target_audience"] = target_audience
 
         count += len(chunk_indices)
         safe_write_parquet(df, REPOS_PARQUET)
         print(f"  Checkpoint saved at {count}/{total}")
 
     pbar.close()
-    print(f"Done. Saved {count} summaries to {REPOS_PARQUET}")
+    print(f"Done. Processed {count} repos, saved to {REPOS_PARQUET}")
 
 
 if __name__ == "__main__":
