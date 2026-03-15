@@ -279,6 +279,16 @@
 (function() {
   const FILTER_CONFIG = __FILTER_CONFIG_JSON__;
 
+  const PARAM_KEY_MAP = {
+    'stars': 'filter-stars',
+    'year': 'filter-created-year',
+    'push': 'filter-days-since-push',
+    'forks': 'filter-forks',
+    'issues': 'filter-open-issues',
+    'lang': 'filter-language',
+    'status': 'filter-activity-status',
+  };
+
   class FilterPanel {
     constructor(datamap, hoverData, config) {
       this.datamap = datamap;
@@ -368,6 +378,7 @@
         if (body.classList.contains('open')) {
           this.updateFilterBodyHeight();
         }
+        this.serializeState();
       });
 
       // Recalculate on resize
@@ -458,6 +469,7 @@
         this.datamap.addSelection(indices, filterId);
       }
       this.updateMatchCount();
+      this.serializeState();
     }
 
     initCheckboxFilter(name, filterId, opts) {
@@ -499,6 +511,7 @@
         }
         this.syncLegendOpacity(filterId);
         this.updateMatchCount();
+        this.serializeState();
       };
 
       checkboxes.forEach(cb => cb.addEventListener('change', onChange));
@@ -527,6 +540,7 @@
       colorSelector.handleColorMapSelection = function(field) {
         origHandler(field);
         self.onColormapChanged(field);
+        self.serializeState();
       };
     }
 
@@ -626,6 +640,141 @@
       }
     }
 
+    serializeState() {
+      const params = new URLSearchParams();
+
+      // Colormap
+      const colorSelector = this.datamap.colorSelector;
+      if (colorSelector && colorSelector.selectedColorMap) {
+        const field = colorSelector.selectedColorMap.field;
+        if (field && field !== 'none') params.set('cm', field);
+      }
+
+      // Range filters
+      for (const [paramKey, filterId] of Object.entries(PARAM_KEY_MAP)) {
+        const f = this.filters[filterId];
+        if (!f || f.type !== 'range') continue;
+        const isFullRange = f.state.minVal <= f.min && f.state.maxVal >= f.sliderMax;
+        if (!isFullRange) {
+          params.set(paramKey, `${f.state.minVal}-${f.state.maxVal}`);
+        }
+      }
+
+      // Checkbox filters
+      for (const [paramKey, filterId] of Object.entries(PARAM_KEY_MAP)) {
+        const f = this.filters[filterId];
+        if (!f || f.type !== 'checkbox') continue;
+        const checked = [];
+        const unchecked = [];
+        f.checkboxes.forEach(cb => {
+          if (cb.checked) checked.push(cb.value);
+          else unchecked.push(cb.value);
+        });
+        if (unchecked.length === 0) continue; // all checked — default
+        if (unchecked.length < checked.length) {
+          params.set(paramKey, unchecked.map(v => '!' + v).join(','));
+        } else {
+          params.set(paramKey, checked.join(','));
+        }
+      }
+
+      // Display toggles (only include non-defaults)
+      const labelToggle = document.getElementById('label-toggle');
+      const edgeGraphToggle = document.getElementById('edge-graph-toggle');
+      if (!labelToggle.checked) params.set('labels', '0');
+      if (edgeGraphToggle.checked) params.set('edges', '1');
+
+      // Panel open state
+      const body = document.getElementById('filter-body');
+      if (body.classList.contains('open')) params.set('panel', '1');
+
+      const qs = params.toString();
+      history.replaceState(null, '', qs ? '?' + qs : location.pathname);
+    }
+
+    restoreFromURL() {
+      const params = new URLSearchParams(location.search);
+      if (params.size === 0) return;
+
+      // Colormap
+      const cm = params.get('cm');
+      if (cm) {
+        const colorSelector = this.datamap.colorSelector;
+        if (colorSelector && colorSelector.colorMaps) {
+          const match = colorSelector.colorMaps.find(m => m.field === cm);
+          if (match) colorSelector.handleColorMapSelection(match);
+        }
+      }
+
+      // Range filters
+      for (const [paramKey, filterId] of Object.entries(PARAM_KEY_MAP)) {
+        const f = this.filters[filterId];
+        if (!f || f.type !== 'range') continue;
+        const val = params.get(paramKey);
+        if (!val) continue;
+        const parts = val.split('-');
+        if (parts.length < 2) continue;
+        // Handle negative numbers: rejoin if split produced extra parts
+        let lo, hi;
+        if (parts.length === 2) {
+          lo = parseInt(parts[0]); hi = parseInt(parts[1]);
+        } else if (parts.length === 3 && parts[0] === '') {
+          // negative min: e.g. "-5-100"
+          lo = parseInt('-' + parts[1]); hi = parseInt(parts[2]);
+        } else {
+          continue;
+        }
+        if (isNaN(lo) || isNaN(hi)) continue;
+        f.minInput.value = lo;
+        f.maxInput.value = hi;
+        f.minInput.dispatchEvent(new Event('input'));
+      }
+
+      // Checkbox filters
+      for (const [paramKey, filterId] of Object.entries(PARAM_KEY_MAP)) {
+        const f = this.filters[filterId];
+        if (!f || f.type !== 'checkbox') continue;
+        const val = params.get(paramKey);
+        if (!val) continue;
+        const items = val.split(',');
+        const isExclusion = items.length > 0 && items[0].startsWith('!');
+        if (isExclusion) {
+          const excluded = new Set(items.map(v => v.slice(1)));
+          f.checkboxes.forEach(cb => { cb.checked = !excluded.has(cb.value); });
+        } else {
+          const included = new Set(items);
+          f.checkboxes.forEach(cb => { cb.checked = included.has(cb.value); });
+        }
+        // Trigger change on first checkbox to apply filter
+        if (f.checkboxes.length > 0) {
+          f.checkboxes[0].dispatchEvent(new Event('change'));
+        }
+      }
+
+      // Display toggles
+      if (params.get('labels') === '0') {
+        const labelToggle = document.getElementById('label-toggle');
+        labelToggle.checked = false;
+        labelToggle.dispatchEvent(new Event('change'));
+      }
+      if (params.get('edges') === '1') {
+        const edgeGraphToggle = document.getElementById('edge-graph-toggle');
+        edgeGraphToggle.checked = true;
+        edgeGraphToggle.dispatchEvent(new Event('change'));
+      }
+
+      // Panel open state
+      if (params.get('panel') === '1') {
+        const body = document.getElementById('filter-body');
+        const container = document.getElementById('filter-container');
+        const icon = document.getElementById('filter-toggle-icon');
+        body.classList.add('open');
+        container.classList.add('open');
+        icon.innerHTML = '&#9662;';
+        this.updateFilterBodyHeight();
+      }
+    }
+
     resetAll() {
       for (const [filterId, f] of Object.entries(this.filters)) {
         if (f.type === 'range') {
@@ -663,6 +812,8 @@
         edgeGraphToggle.checked = false;
         edgeGraphToggle.dispatchEvent(new Event('change'));
       }
+
+      this.serializeState();
     }
   }
 
@@ -690,7 +841,7 @@
   }
 
   // Toggle cluster label visibility.
-  function setupLabelToggle(datamap) {
+  function setupLabelToggle(datamap, filterPanel) {
     const toggle = document.getElementById('label-toggle');
     let labelData = null;
 
@@ -742,11 +893,12 @@
     toggle.addEventListener('change', () => {
       setLabelVisible(toggle.checked);
       if (datamap._pointLabels) datamap._pointLabels.setEnabled(toggle.checked);
+      if (filterPanel) filterPanel.serializeState();
     });
   }
 
   // Toggle edge graph (background image layer) visibility.
-  function setupEdgeGraphToggle(datamap) {
+  function setupEdgeGraphToggle(datamap, filterPanel) {
     const toggle = document.getElementById('edge-graph-toggle');
 
     function setEdgeGraphVisible(visible) {
@@ -767,6 +919,7 @@
 
     toggle.addEventListener('change', () => {
       setEdgeGraphVisible(toggle.checked);
+      if (filterPanel) filterPanel.serializeState();
     });
   }
 
@@ -774,9 +927,10 @@
   window.addEventListener('datamapReady', function(e) {
     const { datamap, hoverData } = e.detail;
     patchHighlightPoints(datamap);
-    setupLabelToggle(datamap);
-    setupEdgeGraphToggle(datamap);
-    new FilterPanel(datamap, hoverData, FILTER_CONFIG);
+    const filterPanel = new FilterPanel(datamap, hoverData, FILTER_CONFIG);
+    setupLabelToggle(datamap, filterPanel);
+    setupEdgeGraphToggle(datamap, filterPanel);
+    filterPanel.restoreFromURL();
   });
 })();
 </script>
