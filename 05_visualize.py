@@ -376,6 +376,18 @@ def main():
     else:
         days_since_push = np.zeros(len(df), dtype=float)
 
+    # Activity Status (derived: Archived / Inactive / Active)
+    is_archived = df["is_archived"].values if "is_archived" in df.columns else np.zeros(len(df), dtype=bool)
+    activity_status = np.where(
+        is_archived, "Archived",
+        np.where(days_since_push >= 730, "Inactive", "Active")
+    )
+    activity_status_color_mapping = {
+        "Active": "#4CAF50",      # green
+        "Inactive": "#FFC107",    # amber
+        "Archived": "#9E9E9E",    # gray
+    }
+
     if "fork_count" in df.columns:
         fork_counts_log = np.log10(df["fork_count"].values.astype(float).clip(min=1))
 
@@ -418,6 +430,7 @@ def main():
         "forks": df["fork_count"].astype(str).values if "fork_count" in df.columns else "0",
         "open_issues": df["open_issue_count"].astype(str).values if "open_issue_count" in df.columns else "0",
         "primary_language": languages,
+        "activity_status": activity_status,
         "search_text": search_text,
     })
 
@@ -457,6 +470,15 @@ def main():
             "kind": "categorical",
             "color_mapping": audience_color_mapping,
         })
+
+    # Activity Status (categorical)
+    all_rawdata.append(activity_status)
+    all_metadata.append({
+        "field": "activity_status",
+        "description": "Activity Status",
+        "kind": "categorical",
+        "color_mapping": activity_status_color_mapping,
+    })
 
     # Owner Type (categorical)
     if "owner_type" in df.columns:
@@ -736,6 +758,7 @@ def _inject_filters(html_path, df, languages):
             "open_issues": {"min": 0, "max": int(issues.max()), "sliderMax": p99_cap(issues)},
         },
         "languages": sorted_language_list,
+        "activityStatuses": ["Active", "Inactive", "Archived"],
     }
 
     # 4. Read and split template by <!-- SECTION: xxx --> markers

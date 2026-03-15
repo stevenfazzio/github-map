@@ -339,6 +339,12 @@
         values: config.languages,
       });
 
+      this.initCheckboxFilter('activity_status', 'filter-activity-status', {
+        label: 'Activity Status',
+        field: 'activity_status',
+        values: config.activityStatuses,
+      });
+
       // Toggle panel
       const header = document.getElementById('filter-header');
       const body = document.getElementById('filter-body');
