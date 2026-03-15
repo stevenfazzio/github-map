@@ -280,12 +280,14 @@ def main():
         '    <div class="hc-repo">{owner}</div>'
         '  </div>'
         '  <div class="hc-tagline">{tagline}</div>'
+        '  <div class="hc-classify">'
+        '    <span class="hc-type" style="background:{project_type_color}30">{project_type}</span>'
+        '    <span class="hc-chip hc-lang">{hover_lang}</span>'
+        '  </div>'
         '  <div class="hc-stats">'
         '    <span class="hc-chip">★ {hover_stars}</span>'
         '    <span class="hc-chip">⑂ {hover_forks}</span>'
-        '    <span class="hc-chip hc-lang">{hover_lang}</span>'
         '  </div>'
-        '  <div class="hc-type" style="background:{project_type_color}30">{project_type}</div>'
         '  <div class="hc-summary">{summary}</div>'
         '</div>'
     )
@@ -593,6 +595,13 @@ def main():
         border: 1px solid rgba(0, 0, 0, 0.15);
         color: #57606a;
     }
+    .hc-classify {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-bottom: 10px;
+    }
     .hc-type {
         display: inline-block;
         font-size: 11px;
@@ -600,7 +609,6 @@ def main():
         text-transform: uppercase;
         letter-spacing: 0.06em;
         color: #2a2a2a;
-        margin-bottom: 8px;
         padding: 2px 8px;
         border-radius: 4px;
     }
