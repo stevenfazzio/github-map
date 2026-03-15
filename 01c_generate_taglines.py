@@ -1,4 +1,4 @@
-"""Generate punchy ≤10-word taglines from existing repo summaries using Claude Haiku."""
+"""Generate concise ≤10-word taglines from existing repo summaries using Claude Haiku."""
 
 import asyncio
 import os
@@ -18,7 +18,11 @@ from config import (
 
 SYSTEM_PROMPT = (
     "Given a project title and summary, write a tagline of at most 10 words "
-    "that captures what this project is in a punchy, memorable phrase. "
+    "that plainly describes what the project does or is. "
+    "Write for a technical audience — open-source developers, researchers, engineers. "
+    "Be specific and concrete, not marketing-speak. "
+    "Bad: 'Revolutionize your workflow with blazing-fast performance' "
+    "Good: 'Fast key-value store with Redis-compatible API' "
     "Return only the tagline text, no quotes or punctuation framing."
 )
 
