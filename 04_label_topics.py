@@ -35,14 +35,33 @@ def main():
     MAX_README_CHARS = 2_000
     has_summary = "summary" in df.columns
 
+    has_tagline = "tagline" in df.columns
+    has_title = "project_title" in df.columns
+
     documents = []
     for _, row in df.iterrows():
-        text = ""
+        summary = ""
         if has_summary and isinstance(row.get("summary"), str):
-            text = row["summary"].strip()
-        if not text:
+            summary = row["summary"].strip()
+
+        # Build prefix: "Title — Tagline" when both exist
+        prefix_parts = []
+        if has_title and isinstance(row.get("project_title"), str) and row["project_title"].strip():
+            prefix_parts.append(row["project_title"].strip())
+        if has_tagline and isinstance(row.get("tagline"), str) and row["tagline"].strip():
+            prefix_parts.append(row["tagline"].strip())
+        prefix = " — ".join(prefix_parts)
+
+        if summary:
+            text = f"{prefix}\n{summary}" if prefix else summary
+        else:
             text = row["readme"].strip() if isinstance(row["readme"], str) else ""
             text = text[:MAX_README_CHARS]
+            if prefix and text:
+                text = f"{prefix}\n{text}"
+            elif prefix:
+                text = prefix
+
         if not text:
             text = row["description"].strip() if isinstance(row["description"], str) else ""
         if not text:

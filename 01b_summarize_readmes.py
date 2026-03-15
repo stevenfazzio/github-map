@@ -48,16 +48,17 @@ SYSTEM_PROMPT = (
     "Return a JSON object with five fields:\n"
     '- "title": The project\'s display name as presented in the README. '
     "If the README does not mention a project name, return null.\n"
-    '- "summary": A 1-2 sentence summary of what the project does.\n'
+    '- "summary": A 2-3 sentence summary explaining what the project does, '
+    "its key features, and what makes it notable. Focus on specifics that "
+    "differentiate it from similar projects.\n"
     '- "project_type": One of: '
     + ", ".join(f'"{t}"' for t in PROJECT_TYPES)
     + ".\n"
-    '- "tagline": A tagline of at most 10 words that plainly describes what '
-    "the project does or is. Write for a technical audience — open-source "
-    "developers, researchers, engineers. Be specific and concrete, not "
-    "marketing-speak. "
-    "Bad: 'Revolutionize your workflow with blazing-fast performance' "
-    "Good: 'Fast key-value store with Redis-compatible API'\n"
+    '- "tagline": A short noun-phrase label (3-7 words) identifying what the '
+    "project *is* — a category/identity, not a feature list. Write for a "
+    "technical audience. "
+    "Bad: 'Modernized git CLI with suggestions and simplified workflows' "
+    "Good: 'Modern git CLI wrapper'\n"
     '- "target_audience": The primary audience for this project. One of: '
     + ", ".join(f'"{a}"' for a in TARGET_AUDIENCES)
     + ". Choose the single best fit:\n"
@@ -106,7 +107,7 @@ async def summarize_readme(
             try:
                 response = await client.messages.create(
                     model=ANTHROPIC_MODEL_SUMMARIZE,
-                    max_tokens=300,
+                    max_tokens=400,
                     system=SYSTEM_PROMPT,
                     messages=[{"role": "user", "content": text[:MAX_README_CHARS]}],
                 )
@@ -171,6 +172,10 @@ async def main():
         df["tagline"] = ""
     if "target_audience" not in df.columns:
         df["target_audience"] = ""
+
+    # Clear tagline and summary to force reprocessing with updated prompt
+    df["tagline"] = ""
+    df["summary"] = ""
 
     # Identify rows needing processing (any of the 5 fields missing)
     needs_processing = (
