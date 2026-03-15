@@ -285,7 +285,7 @@ def main():
         '    <span class="hc-chip">⑂ {hover_forks}</span>'
         '    <span class="hc-chip hc-lang">{hover_lang}</span>'
         '  </div>'
-        '  <div class="hc-type">{project_type}</div>'
+        '  <div class="hc-type" style="background:{project_type_color}30">{project_type}</div>'
         '  <div class="hc-summary">{summary}</div>'
         '</div>'
     )
@@ -394,11 +394,16 @@ def main():
     ]
 
     project_type_values = project_types if has_project_type else ["Other"] * len(df)
+    project_type_colors = [
+        type_color_mapping.get(pt, "#8b6cc1") if has_project_type else "#8b6cc1"
+        for pt in project_type_values
+    ]
     extra_data = pd.DataFrame({
         "full_name": df["full_name"].values,
         "owner": df["full_name"].str.split("/").str[0].values,
         "project_title": project_titles,
         "project_type": project_type_values,
+        "project_type_color": project_type_colors,
         "tagline": taglines,
         "target_audience": target_audiences,
         "summary": summaries,
@@ -589,12 +594,15 @@ def main():
         color: #57606a;
     }
     .hc-type {
+        display: inline-block;
         font-size: 11px;
-        font-weight: 500;
+        font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.06em;
-        color: #8b6cc1;
+        color: #2a2a2a;
         margin-bottom: 8px;
+        padding: 2px 8px;
+        border-radius: 4px;
     }
     .hc-type:empty {
         display: none;
