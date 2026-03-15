@@ -477,11 +477,12 @@
       const { label, field, min, max, sliderMax, step, integerLabels, capLabel, decimals } = opts;
       const group = document.createElement('div');
       group.className = 'filter-group';
-      const maxInitLabel = capLabel && sliderMax < max ? sliderMax.toLocaleString() + '+' : sliderMax.toLocaleString();
+      const fmtInit = integerLabels ? String : (v) => v.toLocaleString();
+      const maxInitLabel = capLabel && sliderMax < max ? fmtInit(sliderMax) + '+' : fmtInit(sliderMax);
       group.innerHTML = `
         <div class="filter-group-label">
           <span>${label}</span>
-          <span class="filter-range-value" id="${filterId}-value">${min.toLocaleString()} – ${maxInitLabel}</span>
+          <span class="filter-range-value" id="${filterId}-value">${fmtInit(min)} – ${maxInitLabel}</span>
         </div>
         <div class="filter-range-wrapper">
           <div class="filter-range-track"></div>
@@ -518,7 +519,7 @@
         state.minVal = lo;
         state.maxVal = hi;
 
-        const fmt = decimals != null ? (v) => v.toFixed(decimals) : (v) => v.toLocaleString();
+        const fmt = decimals != null ? (v) => v.toFixed(decimals) : integerLabels ? (v) => String(v) : (v) => v.toLocaleString();
         const hiText = (hi >= sliderMax && capLabel && sliderMax < max) ? fmt(hi) + '+' : fmt(hi);
         valueLabel.textContent = `${fmt(lo)} – ${hiText}`;
 
