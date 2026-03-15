@@ -6,11 +6,11 @@
 <title>Methodology — GitHub Map</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;700&family=IBM+Plex+Serif:wght@700&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body {
-  font-family: 'Roboto', system-ui, sans-serif;
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
   color: #000;
   background: #fff;
   line-height: 1.7;
@@ -24,42 +24,48 @@ body {
   font-size: 14px; font-weight: 500; pointer-events: auto;
 }
 .site-nav a { color: #333; text-decoration: none; transition: color 0.15s; }
-.site-nav a:hover { color: #1a73e8; }
-.site-nav a.active { color: #1a73e8; border-bottom: 2px solid #1a73e8; line-height: 42px; }
-.content { max-width: 720px; margin: 0 auto; padding: 68px 24px 80px; }
+.site-nav a:hover { color: #0d9488; }
+.site-nav a.active { color: #0d9488; border-bottom: 2px solid #0d9488; line-height: 42px; }
+.content { max-width: 720px; margin: 0 auto; padding: 68px 24px 80px; counter-reset: section; }
+h1, h2 { font-family: 'IBM Plex Serif', Georgia, serif; }
 h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
 .subtitle { color: #555; font-size: 16px; margin-bottom: 40px; }
 h2 {
   font-size: 20px; font-weight: 700; margin-top: 48px; margin-bottom: 16px;
   padding-bottom: 6px; border-bottom: 1px solid #e0e0e0; scroll-margin-top: 72px;
 }
+h2::before { counter-increment: section; content: "\A7" counter(section) "\A0"; color: #0d9488; font-weight: 500; }
 h3 { font-size: 16px; font-weight: 700; margin-top: 24px; margin-bottom: 8px; }
 p { margin-bottom: 16px; }
-a { color: #1a73e8; text-decoration: none; }
+a { color: #0d9488; text-decoration: none; }
 a:hover { text-decoration: underline; }
 ul, ol { margin-bottom: 16px; padding-left: 24px; }
 li { margin-bottom: 6px; }
 table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 15px; }
 th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #e0e0e0; }
 th { font-weight: 500; color: #555; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
-code { font-size: 14px; background: #f5f5f5; padding: 2px 6px; border-radius: 3px; }
-.pipeline-step { margin-bottom: 12px; padding-left: 16px; border-left: 3px solid #e0e0e0; }
+code { font-size: 14px; background: #f0fdfa; color: #134e4a; padding: 2px 6px; border-radius: 3px; }
+.pipeline-step { margin-bottom: 12px; padding-left: 16px; border-left: 3px solid #0d9488; position: relative; }
+.pipeline-step::before {
+  content: ''; position: absolute; left: -6px; top: 6px;
+  width: 9px; height: 9px; border-radius: 50%; background: #0d9488;
+}
 .pipeline-step strong { display: block; margin-bottom: 2px; }
 .pipeline-step p { margin-bottom: 0; color: #333; font-size: 15px; }
-.note { background: #f8f9fa; border-left: 3px solid #1a73e8; padding: 12px 16px; margin: 16px 0; font-size: 14px; color: #333; }
+.note { background: #f8f9fa; border-left: 3px solid #0d9488; padding: 12px 16px; margin: 16px 0; font-size: 14px; color: #333; }
 .toc { margin-bottom: 32px; padding-bottom: 16px; border-bottom: 1px solid #e0e0e0; }
 .toc ul { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px 16px; }
 .toc li { margin: 0; }
 .toc a { font-size: 14px; font-weight: 500; color: #555; text-decoration: none; transition: color 0.15s; }
-.toc a:hover { color: #1a73e8; text-decoration: none; }
-.toc a.active { color: #1a73e8; }
+.toc a:hover { color: #0d9488; text-decoration: none; }
+.toc a.active { color: #0d9488; }
 @media (min-width: 1100px) {
   .content { margin-left: calc(50% - 260px); margin-right: auto; }
   .toc { position: fixed; top: 68px; left: calc(50% - 444px); width: 160px; border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
   .toc ul { display: block; }
   .toc li { margin-bottom: 12px; }
   .toc a { display: block; padding-left: 12px; border-left: 2px solid transparent; line-height: 1.4; }
-  .toc a.active { color: #1a73e8; border-left-color: #1a73e8; }
+  .toc a.active { color: #0d9488; border-left-color: #0d9488; background: #f0fdfa; border-radius: 0 4px 4px 0; }
 }
 </style>
 </head>

@@ -185,7 +185,7 @@ def _build_point_labels_js():
         sizeUnits: 'common',
         getColor: [0, 0, 0],
         fontWeight: 400,
-        fontFamily: 'Roboto, Arial, sans-serif',
+        fontFamily: 'IBM Plex Sans, system-ui, sans-serif',
         characterSet: characterSet,
         background: false,
         wordBreak: 'break-word',
@@ -510,7 +510,7 @@ def main():
         })
 
     tooltip_css = """
-        font-family: 'DM Sans', system-ui, sans-serif;
+        font-family: 'IBM Plex Sans', system-ui, sans-serif;
         font-size: 13px;
         font-weight: 400;
         color: #1a1a2e !important;
@@ -526,7 +526,9 @@ def main():
     """
 
     custom_css = """
-    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600&family=JetBrains+Mono:wght@400;500&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+    #main-title { font-weight: 700 !important; letter-spacing: -0.02em; }
 
     .hc {
         padding: 14px 16px 12px;
@@ -632,6 +634,8 @@ def main():
         tooltip_css=tooltip_css,
         cluster_boundary_polygons=True,
         cluster_boundary_line_width=1.0,
+        font_family="IBM Plex Sans",
+        font_weight=700,
         darkmode=False,
         **edge_bundle_kwargs,
     )
@@ -768,10 +772,10 @@ def _inject_nav(html_path):
   background:rgba(255,255,255,0.85);backdrop-filter:blur(8px);
   -webkit-backdrop-filter:blur(8px);border-bottom:1px solid #e0e0e0;
   padding:0 24px;height:44px;display:flex;align-items:center;gap:24px;
-  font-family:system-ui,sans-serif;font-size:14px;font-weight:500;pointer-events:auto;}
+  font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:14px;font-weight:500;pointer-events:auto;}
 .site-nav a{color:#333;text-decoration:none;transition:color 0.15s;}
-.site-nav a:hover{color:#1a73e8;}
-.site-nav a.active{color:#1a73e8;border-bottom:2px solid #1a73e8;line-height:42px;}
+.site-nav a:hover{color:#0d9488;}
+.site-nav a.active{color:#0d9488;border-bottom:2px solid #0d9488;line-height:42px;}
 .color-swatch{min-width:60px;}
 </style>"""
 
