@@ -77,9 +77,9 @@ All outputs go to `data/` (gitignored). Key files: `candidates.csv`, `metadata.p
 
 ## docs/ Directory: Source vs. Generated Files
 
-- `docs/methodology.html` — **hand-authored source file**. Edit it directly for methodology content changes.
+- `docs/methodology.html` — **hand-authored source file** with a `<!-- DATA_AS_OF -->` placeholder. Step 07 replaces the placeholder with the actual date in-place. Edit it directly for methodology content changes.
 - `docs/index.html` — **generated output** from `pipeline/07_visualize.py` (copy of `data/github_map.html` with adjusted links). Do not edit directly.
-- `data/methodology.html` — **generated copy** of `docs/methodology.html` with nav links adjusted (`index.html` → `github_map.html`) for local use.
+- `data/methodology.html` — **generated copy** of `docs/methodology.html` with nav links adjusted (`index.html` → `github_map.html`) and data date filled in for local use.
 - `docs/filter_panel.html` — **hand-authored HTML snippet** injected by `pipeline/07_visualize.py` into the final map as the filter sidebar.
 
 ## Development
