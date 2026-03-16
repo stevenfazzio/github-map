@@ -9,14 +9,13 @@ import tempfile
 
 import anthropic
 import pandas as pd
-from tqdm import tqdm
-
 from config import (
     ANTHROPIC_API_KEY,
     ANTHROPIC_CONCURRENCY,
     ANTHROPIC_MODEL_SUMMARIZE,
     REPOS_PARQUET,
 )
+from tqdm import tqdm
 
 PROJECT_TYPES = [
     "Library",

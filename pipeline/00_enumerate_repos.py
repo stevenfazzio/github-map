@@ -13,9 +13,8 @@ Fallback: if you don't have GCP access, copy the committed candidates.csv
 to data/candidates.csv and skip this script.
 """
 
-from google.cloud import bigquery
-
 from config import CANDIDATES_COMMITTED, CANDIDATES_CSV, GCP_PROJECT
+from google.cloud import bigquery
 
 QUERY = """\
 SELECT repo.name AS full_name, COUNT(*) AS star_events

@@ -12,32 +12,32 @@ Each stage is a standalone script run in order. A Makefile provides shortcuts fo
 
 ```bash
 uv sync                               # Install from lockfile
-uv sync --extra bigquery              # (optional) for 00_enumerate_repos.py
+uv sync --extra bigquery              # (optional) for pipeline/00_enumerate_repos.py
 # Or without uv: pip install -e . / pip install -e '.[bigquery]'
 
-python 00_enumerate_repos.py          # BigQuery → data/candidates.csv (or use committed fallback)
-python 01_fetch_repos.py              # GraphQL direct lookups → repos.parquet
-python 02_select_top_repos.py         # Trim repos.parquet to top N by stars
-python 03_summarize_readmes.py        # Add LLM summaries, taglines, and target audience via Claude Haiku → updates repos.parquet
-python 04_embed_readmes.py            # Embed READMEs via Cohere → embeddings.npz
-python 05_reduce_umap.py              # UMAP 512-dim → 2D → umap_coords.npz
-python 06_label_topics.py             # Toponymy + Claude Sonnet topic labels → labels.parquet
-python 07_visualize.py                # DataMapPlot interactive HTML → data/github_map.html + docs/index.html
+python pipeline/00_enumerate_repos.py          # BigQuery → data/candidates.csv (or use committed fallback)
+python pipeline/01_fetch_repos.py              # GraphQL direct lookups → repos.parquet
+python pipeline/02_select_top_repos.py         # Trim repos.parquet to top N by stars
+python pipeline/03_summarize_readmes.py        # Add LLM summaries, taglines, and target audience via Claude Haiku → updates repos.parquet
+python pipeline/04_embed_readmes.py            # Embed READMEs via Cohere → embeddings.npz
+python pipeline/05_reduce_umap.py              # UMAP 512-dim → 2D → umap_coords.npz
+python pipeline/06_label_topics.py             # Toponymy + Claude Sonnet topic labels → labels.parquet
+python pipeline/07_visualize.py                # DataMapPlot interactive HTML → data/github_map.html + docs/index.html
 ```
 
 **Two-phase fetch approach:** Step 00 queries GH Archive on BigQuery for repos with significant recent star activity, producing a generous candidate list (~25K). Step 01 then looks up each candidate via `repository(owner:, name:)` GraphQL queries (batched 50 per request), sorts by stars, and keeps the top 10K. This avoids the Search API's 1,000-result cap and non-deterministic ordering.
 
-**Fallback for users without GCP:** A `candidates.csv` is committed to the repo root. If `data/candidates.csv` doesn't exist, `01_fetch_repos.py` copies from the committed file automatically. Most contributors never need BigQuery access.
+**Fallback for users without GCP:** A `candidates.csv` is committed to the repo root. If `data/candidates.csv` doesn't exist, `pipeline/01_fetch_repos.py` copies from the committed file automatically. Most contributors never need BigQuery access.
 
 `experiments/compare_toponymy_configs.py` is a side branch for comparing Toponymy configurations, outputting to `data/experiments/`.
 
 ## Required Environment Variables
 
 Set in `.env` (loaded by `python-dotenv`):
-- `GITHUB_TOKEN` — used by `01_fetch_repos.py`
-- `CO_API_KEY` — Cohere API key, used by `04_embed_readmes.py`, `06_label_topics.py`, `experiments/compare_toponymy_configs.py`
-- `ANTHROPIC_API_KEY` — used by `03_summarize_readmes.py`, `06_label_topics.py`, `experiments/compare_toponymy_configs.py`
-- `GCP_PROJECT` — (optional) Google Cloud project ID, used by `00_enumerate_repos.py`
+- `GITHUB_TOKEN` — used by `pipeline/01_fetch_repos.py`
+- `CO_API_KEY` — Cohere API key, used by `pipeline/04_embed_readmes.py`, `pipeline/06_label_topics.py`, `experiments/compare_toponymy_configs.py`
+- `ANTHROPIC_API_KEY` — used by `pipeline/03_summarize_readmes.py`, `pipeline/06_label_topics.py`, `experiments/compare_toponymy_configs.py`
+- `GCP_PROJECT` — (optional) Google Cloud project ID, used by `pipeline/00_enumerate_repos.py`
 
 ## Architecture
 
@@ -49,9 +49,9 @@ candidates.csv ──> metadata.parquet ──> repos.parquet ──┬──> e
                                                         └────────────────────────────────────────────────┴──> github_map.html
 ```
 
-`metadata.parquet` is the intermediate output of `01_fetch_repos.py`'s metadata-only pass; `repos.parquet` is the final output after README fetching.
+`metadata.parquet` is the intermediate output of `pipeline/01_fetch_repos.py`'s metadata-only pass; `repos.parquet` is the final output after README fetching.
 
-**`config.py`** is the central configuration hub: all file paths, API keys, and constants (batch sizes, model names, target counts) are defined here. Every pipeline script imports from it.
+**`pipeline/config.py`** is the central configuration hub: all file paths, API keys, and constants (batch sizes, model names, target counts) are defined here. Every pipeline script imports from it.
 
 **Key technology choices:**
 - BigQuery (GH Archive) for reliable repo enumeration
@@ -73,14 +73,14 @@ All outputs go to `data/` (gitignored). Key files: `candidates.csv`, `metadata.p
 
 ## Visualization Details
 
-`07_visualize.py` produces the main output — an interactive HTML map with multiple colormaps (language, stars, license, age), hover tooltips with summaries, click-to-open-repo, and search. Toponymy's hierarchical cluster layers are passed directly to DataMapPlot for multi-level topic label display.
+`pipeline/07_visualize.py` produces the main output — an interactive HTML map with multiple colormaps (language, stars, license, age), hover tooltips with summaries, click-to-open-repo, and search. Toponymy's hierarchical cluster layers are passed directly to DataMapPlot for multi-level topic label display.
 
 ## docs/ Directory: Source vs. Generated Files
 
 - `docs/methodology.html` — **hand-authored source file**. Edit it directly for methodology content changes.
-- `docs/index.html` — **generated output** from `07_visualize.py` (copy of `data/github_map.html` with adjusted links). Do not edit directly.
+- `docs/index.html` — **generated output** from `pipeline/07_visualize.py` (copy of `data/github_map.html` with adjusted links). Do not edit directly.
 - `data/methodology.html` — **generated copy** of `docs/methodology.html` with nav links adjusted (`index.html` → `github_map.html`) for local use.
-- `docs/filter_panel.html` — **hand-authored HTML snippet** injected by `07_visualize.py` into the final map as the filter sidebar.
+- `docs/filter_panel.html` — **hand-authored HTML snippet** injected by `pipeline/07_visualize.py` into the final map as the filter sidebar.
 
 ## Development
 

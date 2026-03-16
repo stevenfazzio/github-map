@@ -2,9 +2,13 @@
 
 import importlib
 import sys
+from pathlib import Path
+
+# Ensure pipeline/ is on sys.path so `from config import ...` works inside the script
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "pipeline"))
 
 # Import the module with its dotted-number name
-spec = importlib.util.spec_from_file_location("fetch_repos", "01_fetch_repos.py")
+spec = importlib.util.spec_from_file_location("fetch_repos", "pipeline/01_fetch_repos.py")
 fetch_repos = importlib.util.module_from_spec(spec)
 sys.modules["fetch_repos"] = fetch_repos
 spec.loader.exec_module(fetch_repos)

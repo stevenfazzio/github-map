@@ -2,11 +2,15 @@
 
 import importlib
 import sys
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-spec = importlib.util.spec_from_file_location("visualize", "07_visualize.py")
+# Ensure pipeline/ is on sys.path so `from config import ...` works inside the script
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "pipeline"))
+
+spec = importlib.util.spec_from_file_location("visualize", "pipeline/07_visualize.py")
 visualize = importlib.util.module_from_spec(spec)
 sys.modules["visualize"] = visualize
 spec.loader.exec_module(visualize)

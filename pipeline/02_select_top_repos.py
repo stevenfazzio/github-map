@@ -3,7 +3,6 @@
 import shutil
 
 import pandas as pd
-
 from config import REPOS_PARQUET, REPOS_PRETRIM_PARQUET, TARGET_REPO_COUNT
 
 
