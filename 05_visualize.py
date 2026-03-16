@@ -101,6 +101,9 @@ def _build_edge_bundle(coords, embeddings):
 # Custom JS injected at render time: hide boundaries immediately after async
 # creation, and patch pointLayer.clone to preserve radiusMinPixels/radiusMaxPixels.
 CUSTOM_JS = """
+// Increase scroll-to-zoom speed (default 0.01 is too sluggish)
+datamap.deckgl.setProps({controller: {scrollZoom: {speed: 0.05, smooth: true}}});
+
 // Hide edge-bundle image layer initially (synchronous — exists at custom_js time)
 if (datamap.imageLayer) {
     var idx = datamap.layers.indexOf(datamap.imageLayer);
