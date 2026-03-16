@@ -362,6 +362,51 @@
       this.container = document.getElementById('filter-controls');
       this.matchCountEl = document.getElementById('filter-match-count');
 
+      // CATEGORIES section (always open, static divider)
+      const categoriesDivider = document.createElement('div');
+      categoriesDivider.className = 'filter-section-divider';
+      categoriesDivider.textContent = 'Categories';
+      this.container.appendChild(categoriesDivider);
+      this._categoriesContainer = document.createElement('div');
+      this.container.appendChild(this._categoriesContainer);
+      this._currentSection = this._categoriesContainer;
+
+      this.initCheckboxFilter('language', 'filter-language', {
+        label: 'Primary Language',
+        field: 'primary_language',
+        values: config.languages,
+      });
+
+      this.initCheckboxFilter('license_family', 'filter-license-family', {
+        label: 'License Family',
+        field: 'license_family',
+        values: config.licenseFamilies,
+      });
+
+      this.initCheckboxFilter('project_type', 'filter-project-type', {
+        label: 'Project Type',
+        field: 'project_type',
+        values: config.projectTypes,
+      });
+
+      this.initCheckboxFilter('target_audience', 'filter-target-audience', {
+        label: 'Target Audience',
+        field: 'target_audience',
+        values: config.targetAudiences,
+      });
+
+      this.initCheckboxFilter('activity_status', 'filter-activity-status', {
+        label: 'Activity Status',
+        field: 'activity_status',
+        values: config.activityStatuses,
+      });
+
+      this.initCheckboxFilter('owner_type', 'filter-owner-type', {
+        label: 'Owner Type',
+        field: 'owner_type',
+        values: config.ownerTypes,
+      });
+
       // RANGES section (always open, static divider)
       const rangesDivider = document.createElement('div');
       rangesDivider.className = 'filter-section-divider';
@@ -370,16 +415,6 @@
       this._rangesContainer = document.createElement('div');
       this.container.appendChild(this._rangesContainer);
       this._currentSection = this._rangesContainer;
-
-      this.initRangeFilter('stars', 'filter-stars', {
-        label: 'Star Count',
-        field: 'stars',
-        min: config.ranges.stars.min,
-        max: config.ranges.stars.max,
-        sliderMax: config.ranges.stars.sliderMax,
-        step: 1,
-        capLabel: true,
-      });
 
       this.initRangeFilter('created_year', 'filter-created-year', {
         label: 'Created Date',
@@ -397,6 +432,16 @@
         min: config.ranges.days_since_push.min,
         max: config.ranges.days_since_push.max,
         sliderMax: config.ranges.days_since_push.sliderMax,
+        step: 1,
+        capLabel: true,
+      });
+
+      this.initRangeFilter('stars', 'filter-stars', {
+        label: 'Star Count',
+        field: 'stars',
+        min: config.ranges.stars.min,
+        max: config.ranges.stars.max,
+        sliderMax: config.ranges.stars.sliderMax,
         step: 1,
         capLabel: true,
       });
@@ -419,51 +464,6 @@
         sliderMax: config.ranges.open_issues.sliderMax,
         step: 1,
         capLabel: true,
-      });
-
-      // CATEGORIES section (always open, static divider)
-      const categoriesDivider = document.createElement('div');
-      categoriesDivider.className = 'filter-section-divider';
-      categoriesDivider.textContent = 'Categories';
-      this.container.appendChild(categoriesDivider);
-      this._categoriesContainer = document.createElement('div');
-      this.container.appendChild(this._categoriesContainer);
-      this._currentSection = this._categoriesContainer;
-
-      this.initCheckboxFilter('language', 'filter-language', {
-        label: 'Primary Language',
-        field: 'primary_language',
-        values: config.languages,
-      });
-
-      this.initCheckboxFilter('activity_status', 'filter-activity-status', {
-        label: 'Activity Status',
-        field: 'activity_status',
-        values: config.activityStatuses,
-      });
-
-      this.initCheckboxFilter('license_family', 'filter-license-family', {
-        label: 'License Family',
-        field: 'license_family',
-        values: config.licenseFamilies,
-      });
-
-      this.initCheckboxFilter('project_type', 'filter-project-type', {
-        label: 'Project Type',
-        field: 'project_type',
-        values: config.projectTypes,
-      });
-
-      this.initCheckboxFilter('target_audience', 'filter-target-audience', {
-        label: 'Target Audience',
-        field: 'target_audience',
-        values: config.targetAudiences,
-      });
-
-      this.initCheckboxFilter('owner_type', 'filter-owner-type', {
-        label: 'Owner Type',
-        field: 'owner_type',
-        values: config.ownerTypes,
       });
 
       this.setupLegendSync();
