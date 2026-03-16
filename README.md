@@ -12,22 +12,22 @@ Each stage is a standalone script. Run them in order:
 
 ```bash
 uv sync                               # Install from lockfile
-uv sync --extra bigquery              # (optional) for 00_enumerate_repos.py
+uv sync --extra bigquery              # (optional) for pipeline/00_enumerate_repos.py
 # Or without uv: pip install -e . / pip install -e '.[bigquery]'
 
-python 00_enumerate_repos.py          # BigQuery → data/candidates.csv (optional, see below)
-python 01_fetch_repos.py              # GraphQL direct lookups → repos.parquet
-python 02_select_top_repos.py         # Trim repos.parquet to top N by stars
-python 03_summarize_readmes.py        # Summarize READMEs via Claude Haiku → repos.parquet
-python 04_embed_readmes.py            # Embed READMEs via Cohere → embeddings.npz
-python 05_reduce_umap.py              # UMAP 512D → 2D → umap_coords.npz
-python 06_label_topics.py             # Hierarchical topic labels via Toponymy + Claude → labels.parquet
-python 07_visualize.py                # Interactive HTML map → github_map.html
+python pipeline/00_enumerate_repos.py          # BigQuery → data/candidates.csv (optional, see below)
+python pipeline/01_fetch_repos.py              # GraphQL direct lookups → repos.parquet
+python pipeline/02_select_top_repos.py         # Trim repos.parquet to top N by stars
+python pipeline/03_summarize_readmes.py        # Summarize READMEs via Claude Haiku → repos.parquet
+python pipeline/04_embed_readmes.py            # Embed READMEs via Cohere → embeddings.npz
+python pipeline/05_reduce_umap.py              # UMAP 512D → 2D → umap_coords.npz
+python pipeline/06_label_topics.py             # Hierarchical topic labels via Toponymy + Claude → labels.parquet
+python pipeline/07_visualize.py                # Interactive HTML map → github_map.html
 ```
 
 **Two-phase fetch approach:** Step 00 queries GH Archive on BigQuery for repos with significant recent star activity, producing a generous candidate list (~25K). Step 01 then looks up each candidate via `repository(owner:, name:)` GraphQL queries (batched 50 per request), sorts by stars, and keeps the top 10K. This avoids the Search API's 1,000-result cap and non-deterministic ordering.
 
-**Fallback for users without GCP:** A `candidates.csv` is committed to the repo root. If `data/candidates.csv` doesn't exist, `01_fetch_repos.py` copies from the committed file automatically. Most contributors can skip step 00 entirely.
+**Fallback for users without GCP:** A `candidates.csv` is committed to the repo root. If `data/candidates.csv` doesn't exist, `pipeline/01_fetch_repos.py` copies from the committed file automatically. Most contributors can skip step 00 entirely.
 
 Data flows through `data/` (gitignored):
 
@@ -43,10 +43,10 @@ Set in `.env`:
 
 | Variable | Used by | Purpose |
 |---|---|---|
-| `GITHUB_TOKEN` | `01_fetch_repos.py` | GitHub API authentication |
-| `CO_API_KEY` | `04_embed_readmes.py`, `06_label_topics.py` | Cohere embeddings |
-| `ANTHROPIC_API_KEY` | `03_summarize_readmes.py`, `06_label_topics.py` | Claude summarization & topic naming |
-| `GCP_PROJECT` | `00_enumerate_repos.py` | (optional) Google Cloud project ID for BigQuery |
+| `GITHUB_TOKEN` | `pipeline/01_fetch_repos.py` | GitHub API authentication |
+| `CO_API_KEY` | `pipeline/04_embed_readmes.py`, `pipeline/06_label_topics.py` | Cohere embeddings |
+| `ANTHROPIC_API_KEY` | `pipeline/03_summarize_readmes.py`, `pipeline/06_label_topics.py` | Claude summarization & topic naming |
+| `GCP_PROJECT` | `pipeline/00_enumerate_repos.py` | (optional) Google Cloud project ID for BigQuery |
 
 ## Visualization Features
 

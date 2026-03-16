@@ -2,7 +2,6 @@
 
 import numpy as np
 import umap
-
 from config import EMBEDDINGS_NPZ, UMAP_COORDS_NPZ
 
 

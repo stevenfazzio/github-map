@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from config import (
+from pipeline.config import (
     ANTHROPIC_API_KEY,
     CANDIDATES_CSV,
     CO_API_KEY,

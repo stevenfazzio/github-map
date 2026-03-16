@@ -12,11 +12,6 @@ import glasbey
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from datamapplot.edge_bundling import bundle_edges
-from datamapplot.interactive_rendering import compute_percentile_bounds
-from matplotlib.collections import LineCollection
-from sklearn.neighbors import NearestNeighbors
-
 from config import (
     DOCS_INDEX_HTML,
     EMBEDDINGS_NPZ,
@@ -26,6 +21,10 @@ from config import (
     REPOS_PARQUET,
     UMAP_COORDS_NPZ,
 )
+from datamapplot.edge_bundling import bundle_edges
+from datamapplot.interactive_rendering import compute_percentile_bounds
+from matplotlib.collections import LineCollection
+from sklearn.neighbors import NearestNeighbors
 
 # docs/methodology.html is the hand-authored source for the methodology page.
 # _write_methodology() reads it and writes an adjusted copy to data/.

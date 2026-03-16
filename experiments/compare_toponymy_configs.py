@@ -25,7 +25,7 @@ from toponymy.llm_wrappers import AsyncAnthropicNamer
 
 nest_asyncio.apply()
 
-from config import (
+from pipeline.config import (
     ANTHROPIC_API_KEY,
     CO_API_KEY,
     EMBEDDINGS_NPZ,

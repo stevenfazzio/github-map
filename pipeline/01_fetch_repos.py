@@ -17,8 +17,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
 import requests
-from tqdm import tqdm
-
 from config import (
     CANDIDATES_COMMITTED,
     CANDIDATES_CSV,
@@ -28,6 +26,7 @@ from config import (
     METADATA_PARQUET,
     REPOS_PARQUET,
 )
+from tqdm import tqdm
 
 CONCURRENT_REQUESTS = 5
 METADATA_BATCH_SIZE = 25  # GitHub GraphQL limits query complexity regardless of fields

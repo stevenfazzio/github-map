@@ -3,8 +3,6 @@
 import cohere
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
-
 from config import (
     CO_API_KEY,
     COHERE_BATCH_SIZE,
@@ -12,6 +10,7 @@ from config import (
     EMBEDDINGS_NPZ,
     REPOS_PARQUET,
 )
+from tqdm import tqdm
 
 
 def main():

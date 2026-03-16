@@ -4,9 +4,13 @@ import importlib
 import json
 import re
 import sys
+from pathlib import Path
+
+# Ensure pipeline/ is on sys.path so `from config import ...` works inside the script
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "pipeline"))
 
 # Import module
-spec = importlib.util.spec_from_file_location("summarize_readmes", "03_summarize_readmes.py")
+spec = importlib.util.spec_from_file_location("summarize_readmes", "pipeline/03_summarize_readmes.py")
 summarize_readmes = importlib.util.module_from_spec(spec)
 sys.modules["summarize_readmes"] = summarize_readmes
 spec.loader.exec_module(summarize_readmes)
