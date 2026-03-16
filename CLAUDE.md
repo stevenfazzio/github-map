@@ -8,7 +8,7 @@ A Python data pipeline that analyzes the top 10,000 most-starred GitHub reposito
 
 ## Running the Pipeline
 
-Each stage is a standalone script run in order. There is no Makefile or test suite.
+Each stage is a standalone script run in order. A Makefile provides shortcuts for common dev tasks.
 
 ```bash
 uv sync                               # Install from lockfile
@@ -80,3 +80,18 @@ All outputs go to `data/` (gitignored). Key files: `candidates.csv`, `metadata.p
 - `docs/index.html` — **generated output** from `05_visualize.py` (copy of `data/github_map.html` with adjusted links). Do not edit directly.
 - `data/methodology.html` — **generated copy** of `docs/methodology.html` with nav links adjusted (`index.html` → `github_map.html`) for local use.
 - `docs/filter_panel.html` — **hand-authored HTML snippet** injected by `05_visualize.py` into the final map as the filter sidebar.
+
+## Development
+
+**Makefile targets:**
+- `make install` — `uv sync --extra dev` (includes test and lint deps)
+- `make lint` — run ruff check + format check
+- `make format` — auto-format with ruff
+- `make test` — run pytest suite
+- `make pipeline` — run all pipeline stages in order
+
+**Testing:** pytest tests live in `tests/`. They test config loading, fetch retry logic, summarization batching, and visualization output without requiring API keys or data files.
+
+**Pre-commit hooks:** ruff check and ruff format run automatically on commit. Install with `pre-commit install`.
+
+**CI:** GitHub Actions (`.github/workflows/ci.yml`) runs lint and test on every push and PR.
