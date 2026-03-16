@@ -1,4 +1,4 @@
-"""Tests for response-parsing logic in 01b_summarize_readmes.py."""
+"""Tests for response-parsing logic in 03_summarize_readmes.py."""
 
 import importlib
 import json
@@ -6,7 +6,7 @@ import re
 import sys
 
 # Import module
-spec = importlib.util.spec_from_file_location("summarize_readmes", "01b_summarize_readmes.py")
+spec = importlib.util.spec_from_file_location("summarize_readmes", "03_summarize_readmes.py")
 summarize_readmes = importlib.util.module_from_spec(spec)
 sys.modules["summarize_readmes"] = summarize_readmes
 spec.loader.exec_module(summarize_readmes)

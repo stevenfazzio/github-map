@@ -30,7 +30,7 @@ def main():
     embeddings = np.load(EMBEDDINGS_NPZ)["embeddings"]
     coords = np.load(UMAP_COORDS_NPZ)["coords"]
 
-    # Use LLM-generated summaries if available (from 01b_summarize_readmes.py),
+    # Use LLM-generated summaries if available (from 03_summarize_readmes.py),
     # falling back to truncated READMEs
     MAX_README_CHARS = 2_000
     has_summary = "summary" in df.columns
