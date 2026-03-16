@@ -11,8 +11,9 @@ A Python data pipeline that analyzes the top 10,000 most-starred GitHub reposito
 Each stage is a standalone script run in order. There is no Makefile or test suite.
 
 ```bash
-pip install -e .                      # Install dependencies
-pip install -e '.[bigquery]'          # (optional) for 00_enumerate_repos.py
+uv sync                               # Install from lockfile
+uv sync --extra bigquery              # (optional) for 00_enumerate_repos.py
+# Or without uv: pip install -e . / pip install -e '.[bigquery]'
 
 python 00_enumerate_repos.py          # BigQuery → data/candidates.csv (or use committed fallback)
 python 01_fetch_repos.py              # GraphQL direct lookups → repos.parquet
