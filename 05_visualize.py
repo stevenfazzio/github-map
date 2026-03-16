@@ -33,6 +33,35 @@ METHODOLOGY_SOURCE_HTML = Path(__file__).parent / "docs" / "methodology.html"
 
 FILTER_PANEL_HTML = Path(__file__).parent / "filter_panel.html"
 
+LICENSE_TO_FAMILY = {
+    "AGPL-3.0": "GPL",
+    "GPL-2.0": "GPL",
+    "GPL-3.0": "GPL",
+    "LGPL-3.0": "GPL",
+    "BSD-2-Clause": "BSD",
+    "BSD-3-Clause": "BSD",
+    "CC-BY-4.0": "Creative Commons",
+    "CC-BY-SA-4.0": "Creative Commons",
+    "CC0-1.0": "Creative Commons",
+    "Apache-2.0": "Apache",
+    "MIT": "MIT",
+    "MPL-2.0": "MPL",
+    "ISC": "Other Permissive",
+    "Unlicense": "Other Permissive",
+    "WTFPL": "Other Permissive",
+    "Zlib": "Other Permissive",
+    "Vim": "Other Permissive",
+    "OFL-1.1": "Other Permissive",
+    "NOASSERTION": "Unknown/None",
+    "None": "Unknown/None",
+}
+
+
+def _license_family(df):
+    """Map license column to license family categories."""
+    licenses = df["license"].fillna("").replace("", "None").values
+    return np.array([LICENSE_TO_FAMILY.get(l, "Unknown/None") for l in licenses])
+
 
 def _build_edge_bundle(coords, embeddings):
     """Build KNN edge bundle from embeddings and return background_image kwargs."""
@@ -283,30 +312,7 @@ def main():
     star_counts = np.log10(df["stargazers_count"].values.astype(float))
 
     # 3. License Family (categorical, grouped from license)
-    licenses = df["license"].fillna("").replace("", "None").values
-    license_to_family = {
-        "AGPL-3.0": "GPL",
-        "GPL-2.0": "GPL",
-        "GPL-3.0": "GPL",
-        "LGPL-3.0": "GPL",
-        "BSD-2-Clause": "BSD",
-        "BSD-3-Clause": "BSD",
-        "CC-BY-4.0": "Creative Commons",
-        "CC-BY-SA-4.0": "Creative Commons",
-        "CC0-1.0": "Creative Commons",
-        "Apache-2.0": "Apache",
-        "MIT": "MIT",
-        "MPL-2.0": "MPL",
-        "ISC": "Other Permissive",
-        "Unlicense": "Other Permissive",
-        "WTFPL": "Other Permissive",
-        "Zlib": "Other Permissive",
-        "Vim": "Other Permissive",
-        "OFL-1.1": "Other Permissive",
-        "NOASSERTION": "Unknown/None",
-        "None": "Unknown/None",
-    }
-    license_families = np.array([license_to_family.get(l, "Unknown/None") for l in licenses])
+    license_families = _license_family(df)
     unique_families = sorted(set(license_families))
     family_palette = glasbey.create_palette(palette_size=len(unique_families))
     family_color_mapping = dict(zip(unique_families, family_palette))
@@ -402,6 +408,9 @@ def main():
         "open_issues": df["open_issue_count"].astype(str).values if "open_issue_count" in df.columns else "0",
         "primary_language": languages,
         "activity_status": activity_status,
+        "license_family": license_families,
+        "project_type": project_type_values,
+        "owner_type": owner_types if "owner_type" in df.columns else ["Unknown"] * len(df),
         "search_text": search_text,
     })
 
@@ -728,13 +737,25 @@ def _inject_filters(html_path, df, languages):
         },
         "languages": sorted_language_list,
         "activityStatuses": ["Active", "Inactive", "Archived"],
+        "licenseFamilies": sorted(set(_license_family(df))),
+        "projectTypes": sorted(set(df["project_type"].fillna("Other").replace("", "Other"))) if "project_type" in df.columns else ["Other"],
+        "targetAudiences": sorted(set(df["target_audience"].fillna("Developers").replace("", "Developers"))) if "target_audience" in df.columns else ["Developers"],
+        "ownerTypes": sorted(set(df["owner_type"].fillna("Unknown").replace("", "Unknown"))) if "owner_type" in df.columns else ["Unknown"],
         "colormapFieldToFilterId": {
             "language": "filter-language",
             "activity_status": "filter-activity-status",
+            "license_family": "filter-license-family",
+            "project_type": "filter-project-type",
+            "target_audience": "filter-target-audience",
+            "owner_type": "filter-owner-type",
         },
         "filterIdToColormapField": {
             "filter-language": "language",
             "filter-activity-status": "activity_status",
+            "filter-license-family": "license_family",
+            "filter-project-type": "project_type",
+            "filter-target-audience": "target_audience",
+            "filter-owner-type": "owner_type",
         },
     }
 

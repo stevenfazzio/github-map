@@ -342,6 +342,10 @@
     'issues': 'filter-open-issues',
     'lang': 'filter-language',
     'status': 'filter-activity-status',
+    'license': 'filter-license-family',
+    'type': 'filter-project-type',
+    'audience': 'filter-target-audience',
+    'owner': 'filter-owner-type',
   };
 
   class FilterPanel {
@@ -436,6 +440,30 @@
         label: 'Activity Status',
         field: 'activity_status',
         values: config.activityStatuses,
+      });
+
+      this.initCheckboxFilter('license_family', 'filter-license-family', {
+        label: 'License Family',
+        field: 'license_family',
+        values: config.licenseFamilies,
+      });
+
+      this.initCheckboxFilter('project_type', 'filter-project-type', {
+        label: 'Project Type',
+        field: 'project_type',
+        values: config.projectTypes,
+      });
+
+      this.initCheckboxFilter('target_audience', 'filter-target-audience', {
+        label: 'Target Audience',
+        field: 'target_audience',
+        values: config.targetAudiences,
+      });
+
+      this.initCheckboxFilter('owner_type', 'filter-owner-type', {
+        label: 'Owner Type',
+        field: 'owner_type',
+        values: config.ownerTypes,
       });
 
       this.setupLegendSync();
