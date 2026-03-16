@@ -18,6 +18,7 @@ CANDIDATES_CSV = DATA_DIR / "candidates.csv"
 CANDIDATES_COMMITTED = Path("candidates.csv")
 METADATA_PARQUET = DATA_DIR / "metadata.parquet"
 REPOS_PARQUET = DATA_DIR / "repos.parquet"
+REPOS_PRETRIM_PARQUET = DATA_DIR / "repos_pretrim.parquet"
 EMBEDDINGS_NPZ = DATA_DIR / "embeddings.npz"
 UMAP_COORDS_NPZ = DATA_DIR / "umap_coords.npz"
 TOPONYMY_MODEL_JOBLIB = DATA_DIR / "toponymy_model.joblib"

@@ -67,7 +67,7 @@ candidates.csv ──> metadata.parquet ──> repos.parquet ──┬──> e
 
 ## Data Directory
 
-All outputs go to `data/` (gitignored). Key files: `candidates.csv`, `metadata.parquet`, `repos.parquet`, `embeddings.npz`, `umap_coords.npz`, `labels.parquet`, `toponymy_model.joblib`, `github_map.html`.
+All outputs go to `data/` (gitignored). Key files: `candidates.csv`, `metadata.parquet`, `repos.parquet`, `repos_pretrim.parquet` (backup of repos.parquet before trimming to top 10K), `embeddings.npz`, `umap_coords.npz`, `labels.parquet`, `toponymy_model.joblib`, `github_map.html`.
 
 ## Visualization Details
 
