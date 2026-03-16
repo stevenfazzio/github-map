@@ -666,7 +666,7 @@ def main():
         on_click="window.open(`https://github.com/{full_name}`, '_blank')",
         colormap_rawdata=all_rawdata,
         colormap_metadata=all_metadata,
-        title="GitHub Map",
+        title="Semantic GitHub Map",
         sub_title="Top 10,000 most-starred repositories, mapped by README similarity",
         enable_search=True,
         search_field="search_text",

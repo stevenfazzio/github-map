@@ -1,6 +1,6 @@
-# GitHub Map
+# Semantic GitHub Map
 
-**[View the live map](https://stevenfazzio.github.io/github-map/)**
+**[View the live map](https://stevenfazzio.github.io/semantic-github-map/)**
 
 An interactive 2D map of the top 10,000 most-starred GitHub repositories, positioned by semantic similarity of their READMEs.
 
