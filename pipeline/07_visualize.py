@@ -28,9 +28,9 @@ from sklearn.neighbors import NearestNeighbors
 
 # docs/methodology.html is the hand-authored source for the methodology page.
 # _write_methodology() reads it and writes an adjusted copy to data/.
-METHODOLOGY_SOURCE_HTML = Path(__file__).parent / "docs" / "methodology.html"
+METHODOLOGY_SOURCE_HTML = Path(__file__).resolve().parent.parent / "docs" / "methodology.html"
 
-FILTER_PANEL_HTML = Path(__file__).parent / "docs" / "filter_panel.html"
+FILTER_PANEL_HTML = Path(__file__).resolve().parent.parent / "docs" / "filter_panel.html"
 
 LICENSE_TO_FAMILY = {
     "AGPL-3.0": "GPL",
@@ -54,6 +54,25 @@ LICENSE_TO_FAMILY = {
     "NOASSERTION": "Unknown/None",
     "None": "Unknown/None",
 }
+
+
+def _data_as_of_date():
+    """Return 'Month YYYY' string from REPOS_PARQUET mtime, or None."""
+    try:
+        mtime = REPOS_PARQUET.stat().st_mtime
+        return datetime.fromtimestamp(mtime, tz=timezone.utc).strftime("%B %Y")
+    except OSError:
+        return None
+
+
+def _inject_data_date(html):
+    """Replace <!-- DATA_AS_OF --> placeholder with a date paragraph, or remove it."""
+    date_str = _data_as_of_date()
+    if date_str:
+        replacement = f'<p class="data-date">Data as of {date_str}</p>'
+    else:
+        replacement = ""
+    return html.replace("<!-- DATA_AS_OF -->", replacement)
 
 
 def _license_family(df):
@@ -666,7 +685,8 @@ def main():
         colormap_rawdata=all_rawdata,
         colormap_metadata=all_metadata,
         title="Semantic GitHub Map",
-        sub_title="Top 10,000 most-starred repositories, mapped by README similarity",
+        sub_title="Top 10,000 most-starred repositories, mapped by README similarity"
+        + (f" · Data as of {date_str}" if (date_str := _data_as_of_date()) else ""),
         enable_search=True,
         search_field="search_text",
         custom_js=CUSTOM_JS,
@@ -688,6 +708,9 @@ def main():
 
     _write_methodology(METHODOLOGY_HTML)
     print(f"Saved methodology page to {METHODOLOGY_HTML}")
+
+    _write_methodology_docs()
+    print("Updated docs/methodology.html with data date")
 
     # ── Write docs/ copies for GitHub Pages ───────────────────────────────────
     _copy_for_docs(GITHUB_MAP_HTML, DOCS_INDEX_HTML)
@@ -902,7 +925,15 @@ def _write_methodology(output_path):
     """
     html = METHODOLOGY_SOURCE_HTML.read_text()
     html = html.replace('href="index.html"', 'href="github_map.html"')
+    html = _inject_data_date(html)
     Path(output_path).write_text(html)
+
+
+def _write_methodology_docs():
+    """Write docs/methodology.html with the data date filled in (keeps index.html links)."""
+    html = METHODOLOGY_SOURCE_HTML.read_text()
+    html = _inject_data_date(html)
+    METHODOLOGY_SOURCE_HTML.write_text(html)
 
 
 if __name__ == "__main__":
