@@ -15,7 +15,7 @@ to data/candidates.csv and skip this script.
 
 from google.cloud import bigquery
 
-from config import CANDIDATES_CSV, CANDIDATES_COMMITTED, GCP_PROJECT
+from config import CANDIDATES_COMMITTED, CANDIDATES_CSV, GCP_PROJECT
 
 QUERY = """\
 SELECT repo.name AS full_name, COUNT(*) AS star_events
@@ -59,6 +59,7 @@ def main():
 
     # Also update committed fallback
     import shutil
+
     shutil.copy2(CANDIDATES_CSV, CANDIDATES_COMMITTED)
     print(f"Updated committed fallback at {CANDIDATES_COMMITTED}")
 

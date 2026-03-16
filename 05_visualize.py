@@ -60,7 +60,7 @@ LICENSE_TO_FAMILY = {
 def _license_family(df):
     """Map license column to license family categories."""
     licenses = df["license"].fillna("").replace("", "None").values
-    return np.array([LICENSE_TO_FAMILY.get(l, "Unknown/None") for l in licenses])
+    return np.array([LICENSE_TO_FAMILY.get(lic, "Unknown/None") for lic in licenses])
 
 
 def _build_edge_bundle(coords, embeddings):
@@ -126,6 +126,7 @@ def _build_edge_bundle(coords, embeddings):
 
     print("Edge bundle complete.")
     return {"background_image": data_uri, "background_image_bounds": bounds}
+
 
 # Custom JS injected at render time: hide boundaries immediately after async
 # creation, and patch pointLayer.clone to preserve radiusMinPixels/radiusMaxPixels.
@@ -278,18 +279,18 @@ def main():
         '  <div class="hc-header">'
         '    <div class="hc-title">{project_title}</div>'
         '    <div class="hc-repo">{owner}</div>'
-        '  </div>'
+        "  </div>"
         '  <div class="hc-tagline">{tagline}</div>'
         '  <div class="hc-classify">'
         '    <span class="hc-type" style="background:{project_type_color}30">{project_type}</span>'
         '    <span class="hc-chip hc-lang">{hover_lang}</span>'
-        '  </div>'
+        "  </div>"
         '  <div class="hc-stats">'
         '    <span class="hc-chip">★ {hover_stars}</span>'
         '    <span class="hc-chip">⑂ {hover_forks}</span>'
-        '  </div>'
+        "  </div>"
         '  <div class="hc-summary">{summary}</div>'
-        '</div>'
+        "</div>"
     )
 
     # ── Marker sizes (sqrt of stars) ─────────────────────────────────────────
@@ -345,24 +346,20 @@ def main():
         owner_color_mapping = dict(zip(unique_owners, owner_palette))
 
     if "pushed_at" in df.columns:
-        days_since_push = np.array([
-            (now - pd.to_datetime(d, utc=True).to_pydatetime()).days
-            if d else 9999
-            for d in df["pushed_at"]
-        ], dtype=float)
+        days_since_push = np.array(
+            [(now - pd.to_datetime(d, utc=True).to_pydatetime()).days if d else 9999 for d in df["pushed_at"]],
+            dtype=float,
+        )
     else:
         days_since_push = np.zeros(len(df), dtype=float)
 
     # Activity Status (derived: Archived / Inactive / Active)
     is_archived = df["is_archived"].values if "is_archived" in df.columns else np.zeros(len(df), dtype=bool)
-    activity_status = np.where(
-        is_archived, "Archived",
-        np.where(days_since_push >= 730, "Inactive", "Active")
-    )
+    activity_status = np.where(is_archived, "Archived", np.where(days_since_push >= 730, "Inactive", "Active"))
     activity_status_color_mapping = {
-        "Active": "#4CAF50",      # green
-        "Inactive": "#FFC107",    # amber
-        "Archived": "#9E9E9E",    # gray
+        "Active": "#4CAF50",  # green
+        "Inactive": "#FFC107",  # amber
+        "Archived": "#9E9E9E",  # gray
     }
 
     if "fork_count" in df.columns:
@@ -377,146 +374,172 @@ def main():
     created_years = pd.to_datetime(df["created_at"], utc=True).dt.year.values
     summaries = df["summary"].fillna("").values if has_summary else [""] * len(df)
     taglines = df["tagline"].fillna("").values if "tagline" in df.columns else [""] * len(df)
-    project_titles = df["project_title"].fillna("").values if has_title else df["full_name"].str.split("/").str[1].values
-    target_audiences = df["target_audience"].fillna("Developers").replace("", "Developers").values if "target_audience" in df.columns else ["Developers"] * len(df)
+    project_titles = (
+        df["project_title"].fillna("").values if has_title else df["full_name"].str.split("/").str[1].values
+    )
+    target_audiences = (
+        df["target_audience"].fillna("Developers").replace("", "Developers").values
+        if "target_audience" in df.columns
+        else ["Developers"] * len(df)
+    )
     search_text = [
         f"{fn} {title} {lang or ''} {tag} {aud} {summ}"
-        for fn, title, lang, tag, aud, summ in zip(df["full_name"], project_titles, df["language"].fillna(""), taglines, target_audiences, summaries)
+        for fn, title, lang, tag, aud, summ in zip(
+            df["full_name"], project_titles, df["language"].fillna(""), taglines, target_audiences, summaries
+        )
     ]
 
     project_type_values = project_types if has_project_type else ["Other"] * len(df)
     project_type_colors = [
-        type_color_mapping.get(pt, "#8b6cc1") if has_project_type else "#8b6cc1"
-        for pt in project_type_values
+        type_color_mapping.get(pt, "#8b6cc1") if has_project_type else "#8b6cc1" for pt in project_type_values
     ]
-    extra_data = pd.DataFrame({
-        "full_name": df["full_name"].values,
-        "owner": df["full_name"].str.split("/").str[0].values,
-        "project_title": project_titles,
-        "project_type": project_type_values,
-        "project_type_color": project_type_colors,
-        "tagline": taglines,
-        "target_audience": target_audiences,
-        "summary": summaries,
-        "hover_stars": hover_stars,
-        "hover_forks": hover_forks,
-        "hover_lang": hover_langs,
-        "stars": df["stargazers_count"].astype(str).values,
-        "created_year": created_years.astype(str),
-        "days_since_push": days_since_push.astype(int).astype(str) if "pushed_at" in df.columns else "0",
-        "forks": df["fork_count"].astype(str).values if "fork_count" in df.columns else "0",
-        "open_issues": df["open_issue_count"].astype(str).values if "open_issue_count" in df.columns else "0",
-        "primary_language": languages,
-        "activity_status": activity_status,
-        "license_family": license_families,
-        "project_type": project_type_values,
-        "owner_type": owner_types if "owner_type" in df.columns else ["Unknown"] * len(df),
-        "search_text": search_text,
-    })
+    extra_data = pd.DataFrame(
+        {
+            "full_name": df["full_name"].values,
+            "owner": df["full_name"].str.split("/").str[0].values,
+            "project_title": project_titles,
+            "project_type": project_type_values,
+            "project_type_color": project_type_colors,
+            "tagline": taglines,
+            "target_audience": target_audiences,
+            "summary": summaries,
+            "hover_stars": hover_stars,
+            "hover_forks": hover_forks,
+            "hover_lang": hover_langs,
+            "stars": df["stargazers_count"].astype(str).values,
+            "created_year": created_years.astype(str),
+            "days_since_push": days_since_push.astype(int).astype(str) if "pushed_at" in df.columns else "0",
+            "forks": df["fork_count"].astype(str).values if "fork_count" in df.columns else "0",
+            "open_issues": df["open_issue_count"].astype(str).values if "open_issue_count" in df.columns else "0",
+            "primary_language": languages,
+            "activity_status": activity_status,
+            "license_family": license_families,
+            "owner_type": owner_types if "owner_type" in df.columns else ["Unknown"] * len(df),
+            "search_text": search_text,
+        }
+    )
 
     # Order: categoricals first, then temporal, then count metrics
     all_rawdata = [languages, license_families]
     all_metadata = [
-            {
-                "field": "language",
-                "description": "Primary Language",
-                "kind": "categorical",
-                "color_mapping": lang_color_mapping,
-            },
-            {
-                "field": "license_family",
-                "description": "License Family",
-                "kind": "categorical",
-                "color_mapping": family_color_mapping,
-            },
+        {
+            "field": "language",
+            "description": "Primary Language",
+            "kind": "categorical",
+            "color_mapping": lang_color_mapping,
+        },
+        {
+            "field": "license_family",
+            "description": "License Family",
+            "kind": "categorical",
+            "color_mapping": family_color_mapping,
+        },
     ]
 
     # Project Type (categorical)
     if has_project_type:
         all_rawdata.append(project_types)
-        all_metadata.append({
-            "field": "project_type",
-            "description": "Project Type",
-            "kind": "categorical",
-            "color_mapping": type_color_mapping,
-        })
+        all_metadata.append(
+            {
+                "field": "project_type",
+                "description": "Project Type",
+                "kind": "categorical",
+                "color_mapping": type_color_mapping,
+            }
+        )
 
     # Target Audience (categorical)
     if has_target_audience:
         all_rawdata.append(audiences)
-        all_metadata.append({
-            "field": "target_audience",
-            "description": "Target Audience",
-            "kind": "categorical",
-            "color_mapping": audience_color_mapping,
-        })
+        all_metadata.append(
+            {
+                "field": "target_audience",
+                "description": "Target Audience",
+                "kind": "categorical",
+                "color_mapping": audience_color_mapping,
+            }
+        )
 
     # Activity Status (categorical)
     all_rawdata.append(activity_status)
-    all_metadata.append({
-        "field": "activity_status",
-        "description": "Activity Status",
-        "kind": "categorical",
-        "color_mapping": activity_status_color_mapping,
-    })
+    all_metadata.append(
+        {
+            "field": "activity_status",
+            "description": "Activity Status",
+            "kind": "categorical",
+            "color_mapping": activity_status_color_mapping,
+        }
+    )
 
     # Owner Type (categorical)
     if "owner_type" in df.columns:
         all_rawdata.append(owner_types)
-        all_metadata.append({
-            "field": "owner_type",
-            "description": "Owner Type",
-            "kind": "categorical",
-            "color_mapping": owner_color_mapping,
-        })
+        all_metadata.append(
+            {
+                "field": "owner_type",
+                "description": "Owner Type",
+                "kind": "categorical",
+                "color_mapping": owner_color_mapping,
+            }
+        )
 
     # Created Date (temporal)
     all_rawdata.append(created_dates)
-    all_metadata.append({
+    all_metadata.append(
+        {
             "field": "created",
             "description": "Created Date",
             "kind": "datetime",
             "cmap": "viridis",
-    })
+        }
+    )
 
     # Last Push days (temporal/continuous)
     if "pushed_at" in df.columns:
         all_rawdata.append(np.log10(days_since_push.clip(min=1)))
-        all_metadata.append({
-            "field": "last_push",
-            "description": "Last Push days (log10)",
-            "kind": "continuous",
-            "cmap": "RdYlGn_r",
-        })
+        all_metadata.append(
+            {
+                "field": "last_push",
+                "description": "Last Push days (log10)",
+                "kind": "continuous",
+                "cmap": "RdYlGn_r",
+            }
+        )
 
     # Star Count (continuous)
     all_rawdata.append(star_counts)
-    all_metadata.append({
+    all_metadata.append(
+        {
             "field": "stars",
             "description": "Star Count (log10)",
             "kind": "continuous",
             "cmap": "YlOrRd",
-    })
+        }
+    )
 
     # Fork Count (continuous)
     if "fork_count" in df.columns:
         all_rawdata.append(fork_counts_log)
-        all_metadata.append({
-            "field": "forks",
-            "description": "Fork Count (log10)",
-            "kind": "continuous",
-            "cmap": "YlGnBu",
-        })
+        all_metadata.append(
+            {
+                "field": "forks",
+                "description": "Fork Count (log10)",
+                "kind": "continuous",
+                "cmap": "YlGnBu",
+            }
+        )
 
     # Open Issues (continuous)
     if "open_issue_count" in df.columns:
         all_rawdata.append(open_issues_log)
-        all_metadata.append({
-            "field": "open_issues",
-            "description": "Open Issues (log10)",
-            "kind": "continuous",
-            "cmap": "BuPu",
-        })
+        all_metadata.append(
+            {
+                "field": "open_issues",
+                "description": "Open Issues (log10)",
+                "kind": "continuous",
+                "cmap": "BuPu",
+            }
+        )
 
     tooltip_css = """
         font-family: 'IBM Plex Sans', system-ui, sans-serif;
@@ -669,7 +692,7 @@ def main():
 
     # ── Write docs/ copies for GitHub Pages ───────────────────────────────────
     _copy_for_docs(GITHUB_MAP_HTML, DOCS_INDEX_HTML)
-    print(f"Saved docs/ copies for GitHub Pages")
+    print("Saved docs/ copies for GitHub Pages")
 
 
 # ── Filter panel injection ───────────────────────────────────────────────────
@@ -708,29 +731,34 @@ def _inject_filters(html_path, df, languages):
     created_years = pd.to_datetime(df["created_at"], utc=True).dt.year.values.astype(int)
 
     if "pushed_at" in df.columns:
-        days = np.array([
-            (now - pd.to_datetime(d, utc=True).to_pydatetime()).days
-            if d else 9999
-            for d in df["pushed_at"]
-        ], dtype=int)
+        days = np.array(
+            [(now - pd.to_datetime(d, utc=True).to_pydatetime()).days if d else 9999 for d in df["pushed_at"]],
+            dtype=int,
+        )
     else:
         days = np.zeros(len(df), dtype=int)
 
     forks = df["fork_count"].values.astype(int) if "fork_count" in df.columns else np.zeros(len(df), dtype=int)
-    issues = df["open_issue_count"].values.astype(int) if "open_issue_count" in df.columns else np.zeros(len(df), dtype=int)
+    issues = (
+        df["open_issue_count"].values.astype(int) if "open_issue_count" in df.columns else np.zeros(len(df), dtype=int)
+    )
 
     def p99_cap(arr):
         return int(np.percentile(arr, 99))
 
     # Build sorted language list: top 9 + Other (matching the colormap logic)
     unique_langs = sorted(set(languages))
-    sorted_language_list = [l for l in unique_langs if l != "Other"] + ["Other"]
+    sorted_language_list = [lang for lang in unique_langs if lang != "Other"] + ["Other"]
 
     filter_config = {
         "totalCount": len(df),
         "ranges": {
             "stars": {"min": int(stars.min()), "max": int(stars.max()), "sliderMax": p99_cap(stars)},
-            "created_year": {"min": int(created_years.min()), "max": int(created_years.max()), "sliderMax": int(created_years.max())},
+            "created_year": {
+                "min": int(created_years.min()),
+                "max": int(created_years.max()),
+                "sliderMax": int(created_years.max()),
+            },
             "days_since_push": {"min": 0, "max": int(days.max()), "sliderMax": p99_cap(days)},
             "forks": {"min": 0, "max": int(forks.max()), "sliderMax": p99_cap(forks)},
             "open_issues": {"min": 0, "max": int(issues.max()), "sliderMax": p99_cap(issues)},
@@ -738,9 +766,21 @@ def _inject_filters(html_path, df, languages):
         "languages": sorted_language_list,
         "activityStatuses": ["Active", "Inactive", "Archived"],
         "licenseFamilies": sorted(set(_license_family(df))),
-        "projectTypes": sorted(set(df["project_type"].fillna("Other").replace("", "Other"))) if "project_type" in df.columns else ["Other"],
-        "targetAudiences": sorted(set(df["target_audience"].fillna("Developers").replace("", "Developers"))) if "target_audience" in df.columns else ["Developers"],
-        "ownerTypes": sorted(set(df["owner_type"].fillna("Unknown").replace("", "Unknown"))) if "owner_type" in df.columns else ["Unknown"],
+        "projectTypes": (
+            sorted(set(df["project_type"].fillna("Other").replace("", "Other")))
+            if "project_type" in df.columns
+            else ["Other"]
+        ),
+        "targetAudiences": (
+            sorted(set(df["target_audience"].fillna("Developers").replace("", "Developers")))
+            if "target_audience" in df.columns
+            else ["Developers"]
+        ),
+        "ownerTypes": (
+            sorted(set(df["owner_type"].fillna("Unknown").replace("", "Unknown")))
+            if "owner_type" in df.columns
+            else ["Unknown"]
+        ),
         "colormapFieldToFilterId": {
             "language": "filter-language",
             "activity_status": "filter-activity-status",
@@ -776,7 +816,7 @@ def _inject_filters(html_path, df, languages):
     # 7. Inject HTML after search-container div
     search_pattern = re.compile(
         r'(<div id="search-container" class="container-box[^"]*">\s*'
-        r'<input[^/]*/>\s*</div>)'
+        r"<input[^/]*/>\s*</div>)"
     )
     match = search_pattern.search(html)
     if match:
