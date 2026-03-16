@@ -28,14 +28,14 @@ python 05_visualize.py                # DataMapPlot interactive HTML → data/gi
 
 **Fallback for users without GCP:** A `candidates.csv` is committed to the repo root. If `data/candidates.csv` doesn't exist, `01_fetch_repos.py` copies from the committed file automatically. Most contributors never need BigQuery access.
 
-`04b_experiment.py` is a side branch for comparing embedder configurations (MiniLM vs Cohere), outputting to `data/experiments/`.
+`experiments/compare_toponymy_configs.py` is a side branch for comparing Toponymy configurations, outputting to `data/experiments/`.
 
 ## Required Environment Variables
 
 Set in `.env` (loaded by `python-dotenv`):
 - `GITHUB_TOKEN` — used by `01_fetch_repos.py`
-- `CO_API_KEY` — Cohere API key, used by `02_embed_readmes.py`, `04_label_topics.py`, `04b_experiment.py`
-- `ANTHROPIC_API_KEY` — used by `01b_summarize_readmes.py`, `04_label_topics.py`, `04b_experiment.py`
+- `CO_API_KEY` — Cohere API key, used by `02_embed_readmes.py`, `04_label_topics.py`, `experiments/compare_toponymy_configs.py`
+- `ANTHROPIC_API_KEY` — used by `01b_summarize_readmes.py`, `04_label_topics.py`, `experiments/compare_toponymy_configs.py`
 - `GCP_PROJECT` — (optional) Google Cloud project ID, used by `00_enumerate_repos.py`
 
 ## Architecture

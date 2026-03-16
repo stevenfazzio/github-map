@@ -31,7 +31,7 @@ from config import (
 # _write_methodology() reads it and writes an adjusted copy to data/.
 METHODOLOGY_SOURCE_HTML = Path(__file__).parent / "docs" / "methodology.html"
 
-FILTER_PANEL_HTML = Path(__file__).parent / "filter_panel.html"
+FILTER_PANEL_HTML = Path(__file__).parent / "docs" / "filter_panel.html"
 
 LICENSE_TO_FAMILY = {
     "AGPL-3.0": "GPL",

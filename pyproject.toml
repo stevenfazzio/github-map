@@ -42,4 +42,4 @@ select = ["E", "F", "I"]
 
 [tool.ruff.lint.per-file-ignores]
 "04_label_topics.py" = ["E402"]
-"04b_experiment.py" = ["E402"]
+"experiments/compare_toponymy_configs.py" = ["E402"]
