@@ -11,8 +11,9 @@ The pipeline enumerates candidates via BigQuery, fetches repo metadata via Graph
 Each stage is a standalone script. Run them in order:
 
 ```bash
-pip install -e .                      # Install dependencies
-pip install -e '.[bigquery]'          # (optional) for 00_enumerate_repos.py
+uv sync                               # Install from lockfile
+uv sync --extra bigquery              # (optional) for 00_enumerate_repos.py
+# Or without uv: pip install -e . / pip install -e '.[bigquery]'
 
 python 00_enumerate_repos.py          # BigQuery → data/candidates.csv (optional, see below)
 python 01_fetch_repos.py              # GraphQL direct lookups → repos.parquet
@@ -70,6 +71,19 @@ The output `github_map.html` includes:
 | Topic naming | Claude Sonnet |
 | README summarization | Claude Haiku |
 | Visualization | [DataMapPlot](https://github.com/TutteInstitute/DataMapPlot) |
+
+## Development
+
+```bash
+make install        # Install all deps including dev extras
+make lint           # Run ruff check + format check
+make format         # Auto-format with ruff
+make test           # Run pytest suite
+```
+
+Pre-commit hooks run ruff on every commit. Set up with `pre-commit install`.
+
+CI (GitHub Actions) runs lint and tests on every push and PR.
 
 ## Requirements
 
