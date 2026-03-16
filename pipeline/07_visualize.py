@@ -684,7 +684,7 @@ def main():
         on_click="window.open(`https://github.com/{full_name}`, '_blank')",
         colormap_rawdata=all_rawdata,
         colormap_metadata=all_metadata,
-        title="Semantic GitHub Map",
+        title="Semantic Map of GitHub",
         sub_title="Top 10,000 most-starred repositories, mapped by README similarity"
         + (f" · Data as of {date_str}" if (date_str := _data_as_of_date()) else ""),
         enable_search=True,
