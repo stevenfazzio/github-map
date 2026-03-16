@@ -1,4 +1,4 @@
-"""Tests for pure functions in 05_visualize.py."""
+"""Tests for pure functions in 07_visualize.py."""
 
 import importlib
 import sys
@@ -6,7 +6,7 @@ import sys
 import numpy as np
 import pandas as pd
 
-spec = importlib.util.spec_from_file_location("visualize", "05_visualize.py")
+spec = importlib.util.spec_from_file_location("visualize", "07_visualize.py")
 visualize = importlib.util.module_from_spec(spec)
 sys.modules["visualize"] = visualize
 spec.loader.exec_module(visualize)

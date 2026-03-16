@@ -145,33 +145,39 @@ code { font-size: 14px; background: #f0fdfa; color: #134e4a; padding: 2px 6px; b
 </div>
 
 <div class="pipeline-step">
-  <strong>2. Summarize READMEs</strong>
-  <p><code>01b_summarize_readmes.py</code> &mdash; Sends each README to Claude Haiku to produce
+  <strong>2. Select top repos</strong>
+  <p><code>02_select_top_repos.py</code> &mdash; Trims <code>repos.parquet</code> to the top
+  10,000 repositories by star count, backing up the original before trimming.</p>
+</div>
+
+<div class="pipeline-step">
+  <strong>3. Summarize READMEs</strong>
+  <p><code>03_summarize_readmes.py</code> &mdash; Sends each README to Claude Haiku to produce
   a short natural-language summary, stored back into <code>repos.parquet</code>.</p>
 </div>
 
 <div class="pipeline-step">
-  <strong>3. Embed READMEs</strong>
-  <p><code>02_embed_readmes.py</code> &mdash; Encodes README text into 512-dimensional vectors
+  <strong>4. Embed READMEs</strong>
+  <p><code>04_embed_readmes.py</code> &mdash; Encodes README text into 512-dimensional vectors
   using Cohere's <code>embed-v4.0</code> model, saved to <code>embeddings.npz</code>.</p>
 </div>
 
 <div class="pipeline-step">
-  <strong>4. Reduce to 2D</strong>
-  <p><code>03_reduce_umap.py</code> &mdash; Applies UMAP (n_neighbors=15, min_dist=0.05, cosine metric)
+  <strong>5. Reduce to 2D</strong>
+  <p><code>05_reduce_umap.py</code> &mdash; Applies UMAP (n_neighbors=15, min_dist=0.05, cosine metric)
   to project from 512D to 2D coordinates in <code>umap_coords.npz</code>.</p>
 </div>
 
 <div class="pipeline-step">
-  <strong>5. Label topics</strong>
-  <p><code>04_label_topics.py</code> &mdash; Uses the Toponymy library for hierarchical density-based
+  <strong>6. Label topics</strong>
+  <p><code>06_label_topics.py</code> &mdash; Uses the Toponymy library for hierarchical density-based
   clustering, then sends representative documents from each cluster to Claude Sonnet
   to generate human-readable topic labels at multiple levels of detail, saved to <code>labels.parquet</code>.</p>
 </div>
 
 <div class="pipeline-step">
-  <strong>6. Visualize</strong>
-  <p><code>05_visualize.py</code> &mdash; Combines coordinates, labels, and metadata into an
+  <strong>7. Visualize</strong>
+  <p><code>07_visualize.py</code> &mdash; Combines coordinates, labels, and metadata into an
   interactive HTML map using DataMapPlot, with multiple colormaps, search, hover tooltips,
   and click-to-open functionality.</p>
 </div>

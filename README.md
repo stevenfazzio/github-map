@@ -17,11 +17,12 @@ uv sync --extra bigquery              # (optional) for 00_enumerate_repos.py
 
 python 00_enumerate_repos.py          # BigQuery → data/candidates.csv (optional, see below)
 python 01_fetch_repos.py              # GraphQL direct lookups → repos.parquet
-python 01b_summarize_readmes.py       # Summarize READMEs via Claude Haiku → repos.parquet
-python 02_embed_readmes.py            # Embed READMEs via Cohere → embeddings.npz
-python 03_reduce_umap.py              # UMAP 512D → 2D → umap_coords.npz
-python 04_label_topics.py             # Hierarchical topic labels via Toponymy + Claude → labels.parquet
-python 05_visualize.py                # Interactive HTML map → github_map.html
+python 02_select_top_repos.py         # Trim repos.parquet to top N by stars
+python 03_summarize_readmes.py        # Summarize READMEs via Claude Haiku → repos.parquet
+python 04_embed_readmes.py            # Embed READMEs via Cohere → embeddings.npz
+python 05_reduce_umap.py              # UMAP 512D → 2D → umap_coords.npz
+python 06_label_topics.py             # Hierarchical topic labels via Toponymy + Claude → labels.parquet
+python 07_visualize.py                # Interactive HTML map → github_map.html
 ```
 
 **Two-phase fetch approach:** Step 00 queries GH Archive on BigQuery for repos with significant recent star activity, producing a generous candidate list (~25K). Step 01 then looks up each candidate via `repository(owner:, name:)` GraphQL queries (batched 50 per request), sorts by stars, and keeps the top 10K. This avoids the Search API's 1,000-result cap and non-deterministic ordering.
@@ -43,8 +44,8 @@ Set in `.env`:
 | Variable | Used by | Purpose |
 |---|---|---|
 | `GITHUB_TOKEN` | `01_fetch_repos.py` | GitHub API authentication |
-| `CO_API_KEY` | `02_embed_readmes.py`, `04_label_topics.py` | Cohere embeddings |
-| `ANTHROPIC_API_KEY` | `01b_summarize_readmes.py`, `04_label_topics.py` | Claude summarization & topic naming |
+| `CO_API_KEY` | `04_embed_readmes.py`, `06_label_topics.py` | Cohere embeddings |
+| `ANTHROPIC_API_KEY` | `03_summarize_readmes.py`, `06_label_topics.py` | Claude summarization & topic naming |
 | `GCP_PROJECT` | `00_enumerate_repos.py` | (optional) Google Cloud project ID for BigQuery |
 
 ## Visualization Features

@@ -2,7 +2,7 @@
 
 Two-pass approach for speed:
   1. Metadata-only pass: fetch all ~25K candidates with large batches (no README blobs).
-  2. README pass: fetch READMEs only for the top TARGET_REPO_COUNT repos by stars.
+  2. README pass: fetch READMEs only for the top FETCH_OVERSHOOT_COUNT repos by stars.
 
 Reads candidate repo names from data/candidates.csv (produced by
 00_enumerate_repos.py or copied from committed fallback).
