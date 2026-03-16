@@ -3,3 +3,6 @@ __pycache__/
 .env
 *.egg-info/
 .DS_Store
+.pytest_cache/
+.ruff_cache/
+.venv/
