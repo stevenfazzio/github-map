@@ -75,6 +75,10 @@ def main():
     embedder = CohereEmbedder(api_key=CO_API_KEY, model="embed-v4.0")
     clusterer = ToponymyClusterer(min_clusters=4)
 
+    # Seed NumPy RNG for reproducible exemplar selection within Toponymy.
+    # Note: LLM-generated topic names are inherently non-deterministic.
+    np.random.seed(42)
+
     # Fit clusterer
     clusterer.fit(clusterable_vectors=coords, embedding_vectors=embeddings)
 
