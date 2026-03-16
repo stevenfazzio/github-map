@@ -86,6 +86,22 @@
   margin-bottom: 0;
   line-height: 1.4;
 }
+.filter-group-label.filter-group-label-collapsible {
+  cursor: pointer;
+  user-select: none;
+}
+.filter-group-label.filter-group-label-collapsible:hover {
+  color: #0d9488;
+}
+.filter-subsection-arrow {
+  font-size: 9px;
+  margin-right: 4px;
+  transition: transform 0.15s;
+  display: inline-block;
+}
+.filter-subsection-arrow.collapsed {
+  transform: rotate(-90deg);
+}
 .filter-range-value {
   font-weight: 400;
   font-size: 11px;
@@ -157,6 +173,12 @@
   gap: 0 8px;
   max-height: 140px;
   overflow-y: auto;
+  transition: max-height 0.25s ease, opacity 0.2s ease;
+}
+.filter-checkbox-list.collapsed {
+  max-height: 0 !important;
+  overflow: hidden;
+  opacity: 0;
 }
 .filter-checkbox-item {
   display: flex;
@@ -222,35 +244,6 @@
   margin: 6px 0 4px;
   border-top: 1px solid #e0e0e0;
   padding-top: 4px;
-}
-.filter-section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  cursor: pointer;
-  font-family: 'IBM Plex Sans', system-ui, sans-serif;
-  font-size: 11px;
-  font-weight: 500;
-  color: #999;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin: 6px 0 4px;
-  border-top: 1px solid #e0e0e0;
-  padding-top: 4px;
-  user-select: none;
-}
-.filter-section-header:hover { color: #666; }
-.filter-section-arrow {
-  font-size: 10px;
-  transition: transform 0.15s;
-}
-.filter-section-content {
-  overflow: hidden;
-  max-height: 600px;
-  transition: max-height 0.25s ease;
-}
-.filter-section-content.collapsed {
-  max-height: 0 !important;
 }
 .filter-toggle-row {
   display: flex;
@@ -365,14 +358,14 @@
       this.container = document.getElementById('filter-controls');
       this.matchCountEl = document.getElementById('filter-match-count');
 
-      // Create RANGES section
-      const rangesHeader = this._createSectionHeader('Ranges', 'ranges');
-      this.container.appendChild(rangesHeader);
-      this.rangesContent = document.createElement('div');
-      this.rangesContent.className = 'filter-section-content';
-      this.rangesContent.id = 'filter-section-ranges';
-      this.container.appendChild(this.rangesContent);
-      this._currentSection = this.rangesContent;
+      // RANGES section (always open, static divider)
+      const rangesDivider = document.createElement('div');
+      rangesDivider.className = 'filter-section-divider';
+      rangesDivider.textContent = 'Ranges';
+      this.container.appendChild(rangesDivider);
+      this._rangesContainer = document.createElement('div');
+      this.container.appendChild(this._rangesContainer);
+      this._currentSection = this._rangesContainer;
 
       this.initRangeFilter('stars', 'filter-stars', {
         label: 'Star Count',
@@ -424,14 +417,14 @@
         capLabel: true,
       });
 
-      // Create CATEGORIES section
-      const categoriesHeader = this._createSectionHeader('Categories', 'categories');
-      this.container.appendChild(categoriesHeader);
-      this.categoriesContent = document.createElement('div');
-      this.categoriesContent.className = 'filter-section-content';
-      this.categoriesContent.id = 'filter-section-categories';
-      this.container.appendChild(this.categoriesContent);
-      this._currentSection = this.categoriesContent;
+      // CATEGORIES section (always open, static divider)
+      const categoriesDivider = document.createElement('div');
+      categoriesDivider.className = 'filter-section-divider';
+      categoriesDivider.textContent = 'Categories';
+      this.container.appendChild(categoriesDivider);
+      this._categoriesContainer = document.createElement('div');
+      this.container.appendChild(this._categoriesContainer);
+      this._currentSection = this._categoriesContainer;
 
       this.initCheckboxFilter('language', 'filter-language', {
         label: 'Primary Language',
@@ -562,7 +555,7 @@
 
       const allId = `${filterId}-select-all`;
       const noneId = `${filterId}-select-none`;
-      let html = `<div class="filter-group-label"><span>${label}</span><span class="filter-group-actions"><a id="${allId}">All</a> / <a id="${noneId}">None</a></span></div><div class="filter-checkbox-list">`;
+      let html = `<div class="filter-group-label filter-group-label-collapsible"><span><span class="filter-subsection-arrow collapsed">&#9660;</span>${label}</span><span class="filter-group-actions"><a id="${allId}">All</a> / <a id="${noneId}">None</a></span></div><div class="filter-checkbox-list collapsed">`;
       for (const val of values) {
         const id = `${filterId}-${val.replace(/\s+/g, '-')}`;
         html += `<label class="filter-checkbox-item"><input type="checkbox" id="${id}" value="${val}" checked> ${val}</label>`;
@@ -571,10 +564,22 @@
       group.innerHTML = html;
       (this._currentSection || this.container).appendChild(group);
 
+      // Collapsible subsection toggle
+      const labelRow = group.querySelector('.filter-group-label');
+      const checkboxList = group.querySelector('.filter-checkbox-list');
+      const arrow = group.querySelector('.filter-subsection-arrow');
+      labelRow.addEventListener('click', (e) => {
+        // Don't toggle when clicking All/None links
+        if (e.target.closest('.filter-group-actions')) return;
+        const isCollapsed = checkboxList.classList.toggle('collapsed');
+        arrow.classList.toggle('collapsed', isCollapsed);
+        this.serializeState();
+      });
+
       const checkboxes = group.querySelectorAll('input[type="checkbox"]');
       const fieldValues = this.hoverData[field];
 
-      this.filters[filterId] = { type: 'checkbox', checkboxes, fieldValues, values, group };
+      this.filters[filterId] = { type: 'checkbox', checkboxes, fieldValues, values, group, name };
 
       const onChange = () => {
         const checked = new Set();
@@ -714,22 +719,6 @@
       if (available > 0) body.style.maxHeight = available + 'px';
     }
 
-    _createSectionHeader(title, sectionId) {
-      const header = document.createElement('div');
-      header.className = 'filter-section-header';
-      header.innerHTML = `<span>${title}</span><span class="filter-section-arrow">&#9660;</span>`;
-      const arrow = header.querySelector('.filter-section-arrow');
-      header.addEventListener('click', () => {
-        const content = document.getElementById(`filter-section-${sectionId}`);
-        if (!content) return;
-        const collapsed = content.classList.toggle('collapsed');
-        arrow.innerHTML = collapsed ? '&#9654;' : '&#9660;';
-        this.serializeState();
-        this.updateFilterBodyHeight();
-      });
-      return header;
-    }
-
     _updateResetButtonState() {
       const resetBtn = document.getElementById('filter-reset-inline');
       let anyActive = false;
@@ -809,11 +798,14 @@
       const body = document.getElementById('filter-body');
       if (body.classList.contains('open')) params.set('panel', '1');
 
-      // Section collapse state (only serialize collapsed sections)
-      const collapsedSections = [];
-      if (this.rangesContent && this.rangesContent.classList.contains('collapsed')) collapsedSections.push('ranges');
-      if (this.categoriesContent && this.categoriesContent.classList.contains('collapsed')) collapsedSections.push('categories');
-      if (collapsedSections.length > 0) params.set('collapsed', collapsedSections.join(','));
+      // Subsection expand state (collapsed by default, so serialize expanded ones)
+      const expandedSubs = [];
+      for (const [filterId, f] of Object.entries(this.filters)) {
+        if (f.type !== 'checkbox' || !f.name) continue;
+        const list = f.group.querySelector('.filter-checkbox-list');
+        if (list && !list.classList.contains('collapsed')) expandedSubs.push(f.name);
+      }
+      if (expandedSubs.length > 0) params.set('expanded', expandedSubs.join(','));
 
       const qs = params.toString();
       history.replaceState(null, '', qs ? '?' + qs : location.pathname);
@@ -890,18 +882,17 @@
         edgeGraphToggle.dispatchEvent(new Event('change'));
       }
 
-      // Section collapse state
-      const collapsed = params.get('collapsed');
-      if (collapsed) {
-        for (const sectionId of collapsed.split(',')) {
-          const content = document.getElementById(`filter-section-${sectionId}`);
-          if (content) {
-            content.classList.add('collapsed');
-            const header = content.previousElementSibling;
-            if (header) {
-              const arrow = header.querySelector('.filter-section-arrow');
-              if (arrow) arrow.innerHTML = '&#9654;';
-            }
+      // Subsection expand state (collapsed by default, expand specified ones)
+      const expanded = params.get('expanded');
+      if (expanded) {
+        const expandedNames = new Set(expanded.split(','));
+        for (const [filterId, f] of Object.entries(this.filters)) {
+          if (f.type !== 'checkbox' || !f.name) continue;
+          if (expandedNames.has(f.name)) {
+            const list = f.group.querySelector('.filter-checkbox-list');
+            const arrow = f.group.querySelector('.filter-subsection-arrow');
+            if (list) list.classList.remove('collapsed');
+            if (arrow) arrow.classList.remove('collapsed');
           }
         }
       }
