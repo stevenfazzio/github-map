@@ -1,4 +1,4 @@
-# Semantic GitHub Map
+# Semantic Map of GitHub
 
 **[View the live map](https://stevenfazzio.github.io/semantic-github-map/)**
 
