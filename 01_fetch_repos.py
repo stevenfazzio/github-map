@@ -85,6 +85,7 @@ README_ALIASES = [
     ("readme_titlecase", "ReadMe.md"),
 ]
 
+
 def _build_readme_fragment() -> str:
     """Build the ReadmeFields fragment from README_ALIASES."""
     lines = ["fragment ReadmeFields on Repository {", "  nameWithOwner"]
@@ -92,6 +93,7 @@ def _build_readme_fragment() -> str:
         lines.append(f'  {alias}: object(expression: "HEAD:{filename}") {{ ... on Blob {{ text }} }}')
     lines.append("}")
     return "\n".join(lines)
+
 
 README_FRAGMENT = _build_readme_fragment()
 
@@ -156,17 +158,12 @@ def _extract_readme(node: dict) -> str:
 
 def _parse_metadata(node: dict) -> dict:
     """Parse a GraphQL Repository node into a flat row dict (no README)."""
-    topics_list = [
-        t["topic"]["name"]
-        for t in (node.get("repositoryTopics") or {}).get("nodes", [])
-    ]
+    topics_list = [t["topic"]["name"] for t in (node.get("repositoryTopics") or {}).get("nodes", [])]
     default_branch_ref = node.get("defaultBranchRef") or {}
     target = default_branch_ref.get("target") or {}
     history = target.get("history") or {}
     languages_edges = (node.get("languages") or {}).get("edges", [])
-    languages_json = json.dumps(
-        [{"name": e["node"]["name"], "bytes": e["size"]} for e in languages_edges]
-    )
+    languages_json = json.dumps([{"name": e["node"]["name"], "bytes": e["size"]} for e in languages_edges])
 
     return {
         "full_name": node["nameWithOwner"],
@@ -204,8 +201,7 @@ def _load_candidates() -> list[str]:
             shutil.copy2(CANDIDATES_COMMITTED, CANDIDATES_CSV)
         else:
             raise FileNotFoundError(
-                f"No candidates file found. Run 00_enumerate_repos.py first, "
-                f"or place candidates.csv in the repo root."
+                "No candidates file found. Run 00_enumerate_repos.py first, or place candidates.csv in the repo root."
             )
 
     candidates = []
@@ -300,10 +296,7 @@ def _fetch_concurrent(items, batch_size, fetch_fn, desc, combine_fn):
 
     with tqdm(total=len(items), desc=desc) as pbar:
         with ThreadPoolExecutor(max_workers=CONCURRENT_REQUESTS) as executor:
-            futures = {
-                executor.submit(fetch_fn, batch): batch
-                for batch in batches
-            }
+            futures = {executor.submit(fetch_fn, batch): batch for batch in batches}
             for future in as_completed(futures):
                 batch = futures[future]
                 try:
@@ -341,8 +334,11 @@ def main():
 
     if need_metadata:
         batch_results = _fetch_concurrent(
-            need_metadata, METADATA_BATCH_SIZE, _fetch_metadata_batch,
-            "Fetching metadata", list,
+            need_metadata,
+            METADATA_BATCH_SIZE,
+            _fetch_metadata_batch,
+            "Fetching metadata",
+            list,
         )
         for batch_rows in batch_results:
             for r in batch_rows:
@@ -376,8 +372,11 @@ def main():
 
     if need_readme:
         batch_results = _fetch_concurrent(
-            need_readme, GRAPHQL_BATCH_SIZE, _fetch_readme_batch,
-            "Fetching READMEs", dict,
+            need_readme,
+            GRAPHQL_BATCH_SIZE,
+            _fetch_readme_batch,
+            "Fetching READMEs",
+            dict,
         )
         for readme_map in batch_results:
             for name, text in readme_map.items():

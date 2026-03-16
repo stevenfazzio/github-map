@@ -51,9 +51,7 @@ SYSTEM_PROMPT = (
     '- "summary": A 2-3 sentence summary explaining what the project does, '
     "its key features, and what makes it notable. Focus on specifics that "
     "differentiate it from similar projects.\n"
-    '- "project_type": One of: '
-    + ", ".join(f'"{t}"' for t in PROJECT_TYPES)
-    + ".\n"
+    '- "project_type": One of: ' + ", ".join(f'"{t}"' for t in PROJECT_TYPES) + ".\n"
     '- "tagline": A short noun-phrase label (3-7 words) identifying what the '
     "project *is* — a category/identity, not a feature list. Write for a "
     "technical audience. "
@@ -80,9 +78,7 @@ MAX_RETRIES = 5
 
 def safe_write_parquet(df, path):
     """Atomically write a parquet file via tmp + verify + rename."""
-    tmp_fd, tmp_path = tempfile.mkstemp(
-        dir=os.path.dirname(path), suffix=".parquet.tmp"
-    )
+    tmp_fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(path), suffix=".parquet.tmp")
     os.close(tmp_fd)
     try:
         df.to_parquet(tmp_path, index=False)
@@ -208,11 +204,7 @@ async def main():
 
         for idx in chunk_indices:
             readme = df.at[idx, "readme"] if pd.notna(df.at[idx, "readme"]) else ""
-            description = (
-                df.at[idx, "description"]
-                if pd.notna(df.at[idx, "description"])
-                else ""
-            )
+            description = df.at[idx, "description"] if pd.notna(df.at[idx, "description"]) else ""
             full_name = df.at[idx, "full_name"]
 
             text = readme.strip() or description.strip()
@@ -230,17 +222,13 @@ async def main():
 
         async def _process(idx, full_name, text):
             try:
-                return idx, await summarize_readme(
-                    client, semaphore, text, full_name, pbar
-                )
+                return idx, await summarize_readme(client, semaphore, text, full_name, pbar)
             except Exception as e:
                 print(f"\n  Error summarizing {full_name}: {e}")
                 pbar.update(1)
                 return idx, None
 
-        results = await asyncio.gather(
-            *[_process(idx, fn, txt) for idx, fn, txt in tasks]
-        )
+        results = await asyncio.gather(*[_process(idx, fn, txt) for idx, fn, txt in tasks])
 
         for idx, result in results:
             if result is not None:

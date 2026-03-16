@@ -6,12 +6,12 @@ and produces comparison outputs.
 """
 
 import argparse
-import asyncio
 import copy
 import itertools
 import tempfile
 
 import anthropic
+import nest_asyncio
 import numpy as np
 import pandas as pd
 from toponymy import Toponymy, ToponymyClusterer
@@ -22,8 +22,6 @@ from toponymy.audit import (
 )
 from toponymy.embedding_wrappers import CohereEmbedder
 from toponymy.llm_wrappers import AsyncAnthropicNamer
-
-import nest_asyncio
 
 nest_asyncio.apply()
 
@@ -41,9 +39,9 @@ from config import (
 
 EXPERIMENTS = [
     {"name": "detail_full_range", "lowest_detail_level": 0.0, "highest_detail_level": 1.0},
-    {"name": "detail_medium",     "lowest_detail_level": 0.3, "highest_detail_level": 0.8},
-    {"name": "detail_concise",    "lowest_detail_level": 0.5, "highest_detail_level": 1.0},
-    {"name": "detail_broad",      "lowest_detail_level": 0.3, "highest_detail_level": 1.0},
+    {"name": "detail_medium", "lowest_detail_level": 0.3, "highest_detail_level": 0.8},
+    {"name": "detail_concise", "lowest_detail_level": 0.5, "highest_detail_level": 1.0},
+    {"name": "detail_broad", "lowest_detail_level": 0.3, "highest_detail_level": 1.0},
 ]
 
 DEFAULTS = {
@@ -169,15 +167,15 @@ def run_experiments(df, embeddings, coords, documents, resume=False):
         exp_dir.mkdir(exist_ok=True)
 
         if resume and (exp_dir / "labels.parquet").exists():
-            print(f"\n{'='*60}")
+            print(f"\n{'=' * 60}")
             print(f"Skipping experiment (resume): {name}")
-            print(f"{'='*60}")
+            print(f"{'=' * 60}")
             continue
 
         cfg = {**DEFAULTS, **exp}
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Running experiment: {name}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         # Re-fit clusterer if min_clusters differs from default
         if cfg["min_clusters"] != default_min:
@@ -206,11 +204,13 @@ def run_experiments(df, embeddings, coords, documents, resume=False):
 
         # Save per-experiment outputs
         coarse_labels, fine_labels = extract_labels(topic_model, documents)
-        labels_df = pd.DataFrame({
-            "full_name": df["full_name"],
-            "coarse_label": coarse_labels,
-            "fine_label": fine_labels,
-        })
+        labels_df = pd.DataFrame(
+            {
+                "full_name": df["full_name"],
+                "coarse_label": coarse_labels,
+                "fine_label": fine_labels,
+            }
+        )
         labels_df.to_parquet(exp_dir / "labels.parquet", index=False)
         print(f"  Saved labels to {exp_dir / 'labels.parquet'}")
 
@@ -222,12 +222,14 @@ def run_experiments(df, embeddings, coords, documents, resume=False):
         for li, layer in enumerate(topic_model.cluster_layers_):
             indices = getattr(layer, "dismbiguation_topic_indices", None)
             if indices is not None:
-                disambig_rows.append({
-                    "layer": li,
-                    "num_groups": len(indices),
-                    "topics_renamed": sum(len(g) for g in indices),
-                    "total_topics": len(layer.topic_names),
-                })
+                disambig_rows.append(
+                    {
+                        "layer": li,
+                        "num_groups": len(indices),
+                        "topics_renamed": sum(len(g) for g in indices),
+                        "total_topics": len(layer.topic_names),
+                    }
+                )
         if disambig_rows:
             pd.DataFrame(disambig_rows).to_csv(exp_dir / "disambiguation.csv", index=False)
             print(f"  Saved disambiguation stats to {exp_dir / 'disambiguation.csv'}")
@@ -251,9 +253,9 @@ def compare_experiments():
         print("No completed experiments found. Nothing to compare.")
         return
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("Comparison across experiments")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"Experiments: {', '.join(experiment_names)}")
 
     md_lines = ["# Experiment Comparison\n"]
@@ -279,8 +281,10 @@ def compare_experiments():
             comp = pd.read_csv(exp_dir / f"audit_comparison_layer{layer_idx}.csv")
             if "Final LLM Topic Name" in comp.columns:
                 lengths = comp["Final LLM Topic Name"].astype(str).str.len()
-                print(f"  Layer {layer_idx} avg topic name length: {lengths.mean():.1f} chars "
-                      f"(min {lengths.min()}, max {lengths.max()})")
+                print(
+                    f"  Layer {layer_idx} avg topic name length: {lengths.mean():.1f} chars "
+                    f"(min {lengths.min()}, max {lengths.max()})"
+                )
             layer_idx += 1
 
         # Keyphrase-in-topic rates from saved keyphrase CSVs
@@ -364,13 +368,12 @@ def compare_experiments():
                 if not diff_rows.empty:
                     print(f"  Example divergent clusters ({name_a} vs {name_b}):")
                     for _, row in diff_rows.iterrows():
-                        print(f"    Cluster {row['Cluster ID']}: "
-                              f"{row[col_a]!r} vs {row[col_b]!r}")
+                        print(f"    Cluster {row['Cluster ID']}: {row[col_a]!r} vs {row[col_b]!r}")
 
         md_lines.append("")
 
     # Keyphrase overlap (Jaccard) for fine layer
-    print(f"\n-- Keyphrase overlap (fine, Jaccard) --")
+    print("\n-- Keyphrase overlap (fine, Jaccard) --")
     md_lines.append("## Keyphrase Overlap (fine layer, Jaccard)\n")
     kp_dfs = {}
     for name in experiment_names:
@@ -398,15 +401,14 @@ def compare_experiments():
                 md_lines.append(f"- {line.strip()}")
 
     # Write summary markdown
-    md_lines.append(f"\n---\n*Generated by 04b_experiment.py*\n")
+    md_lines.append("\n---\n*Generated by 04b_experiment.py*\n")
     (EXPERIMENTS_DIR / "comparison_summary.md").write_text("\n".join(md_lines))
     print(f"\nSaved comparison summary to {EXPERIMENTS_DIR / 'comparison_summary.md'}")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Run Toponymy detail-level experiments")
-    parser.add_argument("--resume", action="store_true",
-                        help="Skip experiments with existing labels.parquet")
+    parser.add_argument("--resume", action="store_true", help="Skip experiments with existing labels.parquet")
     args = parser.parse_args()
 
     df, embeddings, coords, documents = load_data()

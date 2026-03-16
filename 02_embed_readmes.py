@@ -7,7 +7,15 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from config import CO_API_KEY, COHERE_BATCH_SIZE, COHERE_EMBED_DIMENSION, EMBEDDINGS_NPZ, REPOS_PARQUET, REPOS_PRETRIM_PARQUET, TARGET_REPO_COUNT
+from config import (
+    CO_API_KEY,
+    COHERE_BATCH_SIZE,
+    COHERE_EMBED_DIMENSION,
+    EMBEDDINGS_NPZ,
+    REPOS_PARQUET,
+    REPOS_PRETRIM_PARQUET,
+    TARGET_REPO_COUNT,
+)
 
 
 def main():
@@ -19,7 +27,10 @@ def main():
         shutil.copy2(REPOS_PARQUET, REPOS_PRETRIM_PARQUET)
         print(f"Backed up original ({len(pd.read_parquet(REPOS_PRETRIM_PARQUET)):,} rows) to {REPOS_PRETRIM_PARQUET}")
         df.to_parquet(REPOS_PARQUET, index=False)
-        print(f"Trimmed to top {TARGET_REPO_COUNT:,} by stars (min: {df['stargazers_count'].min():,}), saved back to {REPOS_PARQUET}")
+        print(
+            f"Trimmed to top {TARGET_REPO_COUNT:,} by stars"
+            f" (min: {df['stargazers_count'].min():,}), saved back to {REPOS_PARQUET}"
+        )
 
     texts = [row["readme"].strip() for _, row in df.iterrows()]
 

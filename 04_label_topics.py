@@ -1,16 +1,16 @@
 """Generate topic labels using Toponymy with Claude LLM."""
 
-import asyncio
 import joblib
-import numpy as np
-import pandas as pd
-from toponymy import Toponymy, ToponymyClusterer
-from toponymy.llm_wrappers import AsyncAnthropicNamer
-from toponymy.embedding_wrappers import CohereEmbedder
 
 # Workaround: nested asyncio.run() calls fail with "Event loop is closed".
 # nest_asyncio patches the loop to allow re-entrant calls.
 import nest_asyncio
+import numpy as np
+import pandas as pd
+from toponymy import Toponymy, ToponymyClusterer
+from toponymy.embedding_wrappers import CohereEmbedder
+from toponymy.llm_wrappers import AsyncAnthropicNamer
+
 nest_asyncio.apply()
 
 from config import (
