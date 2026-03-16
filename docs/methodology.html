@@ -35,6 +35,9 @@ h2 {
   padding-bottom: 6px; border-bottom: 1px solid #e0e0e0; scroll-margin-top: 72px;
 }
 h2::before { counter-increment: section; content: "\A7" counter(section) "\A0"; color: #0d9488; font-weight: 500; }
+h2 .anchor { color: #0d9488; text-decoration: none; opacity: 0; margin-left: 6px; font-weight: 400; font-size: 0.85em; transition: opacity 0.15s; }
+h2:hover .anchor { opacity: 1; }
+h2 .anchor:hover { text-decoration: underline; }
 h3 { font-size: 16px; font-weight: 700; margin-top: 24px; margin-bottom: 8px; }
 p { margin-bottom: 16px; }
 a { color: #0d9488; text-decoration: none; }
@@ -90,7 +93,7 @@ code { font-size: 14px; background: #f0fdfa; color: #134e4a; padding: 2px 6px; b
   </ul>
 </nav>
 
-<h2 id="overview">Overview</h2>
+<h2 id="overview">Overview <a href="#overview" class="anchor">#</a></h2>
 <p>
   This visualization maps the top 10,000 most-starred GitHub repositories onto a 2D plane,
   positioned by the semantic similarity of their README files. Repositories with similar
@@ -104,7 +107,7 @@ code { font-size: 14px; background: #f0fdfa; color: #134e4a; padding: 2px 6px; b
   visualization.
 </p>
 
-<h2 id="corpus-collection">Corpus Collection</h2>
+<h2 id="corpus-collection">Corpus Collection <a href="#corpus-collection" class="anchor">#</a></h2>
 <p>
   The pipeline uses a two-phase approach to identify the top 10,000 most-starred repositories.
   First, <code>00_enumerate_repos.py</code> queries GH Archive on BigQuery for repositories
@@ -124,7 +127,7 @@ code { font-size: 14px; background: #f0fdfa; color: #134e4a; padding: 2px 6px; b
   clean hover-text for the visualization and a normalized input for downstream embedding.
 </p>
 
-<h2 id="processing-pipeline">Processing Pipeline</h2>
+<h2 id="processing-pipeline">Processing Pipeline <a href="#processing-pipeline" class="anchor">#</a></h2>
 
 <div class="pipeline-step">
   <strong>0. Enumerate candidates</strong>
@@ -173,7 +176,7 @@ code { font-size: 14px; background: #f0fdfa; color: #134e4a; padding: 2px 6px; b
   and click-to-open functionality.</p>
 </div>
 
-<h2 id="tools">Tools &amp; Technologies</h2>
+<h2 id="tools">Tools &amp; Technologies <a href="#tools" class="anchor">#</a></h2>
 <table>
   <thead>
     <tr><th>Tool</th><th>Role</th></tr>
@@ -190,7 +193,7 @@ code { font-size: 14px; background: #f0fdfa; color: #134e4a; padding: 2px 6px; b
   </tbody>
 </table>
 
-<h2 id="using-the-visualization">Using the Visualization</h2>
+<h2 id="using-the-visualization">Using the Visualization <a href="#using-the-visualization" class="anchor">#</a></h2>
 <ul>
   <li><strong>Pan and zoom</strong> &mdash; Click and drag to pan; scroll to zoom in and out.</li>
   <li><strong>Hover</strong> &mdash; Hover over any point to see the repository name, star count,
@@ -204,7 +207,7 @@ code { font-size: 14px; background: #f0fdfa; color: #134e4a; padding: 2px 6px; b
   automatically by the clustering algorithm.</li>
 </ul>
 
-<h2 id="field-definitions">Field Definitions</h2>
+<h2 id="field-definitions">Field Definitions <a href="#field-definitions" class="anchor">#</a></h2>
 <table>
   <thead>
     <tr><th>Colormap</th><th>Description</th></tr>
