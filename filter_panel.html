@@ -962,7 +962,8 @@
     }
   }
 
-  // Monkey-patch highlightPoints to preserve original point radius settings.
+  // Monkey-patch highlightPoints to preserve original point radius settings
+  // and to correctly dim all points when filters are active but match nothing.
   function patchHighlightPoints(datamap) {
     var origHighlight = datamap.highlightPoints.bind(datamap);
     datamap.highlightPoints = function(itemId) {
@@ -975,11 +976,31 @@
       };
       origHighlight(itemId);
       currentLayer.clone = realClone;
+
+      // Fix: DataMapPlot treats empty selection as "no filter" and shows
+      // all points. When filters ARE active but produce zero matches,
+      // override to dim everything.
+      var mgr = datamap.dataSelectionManager;
+      var hasActiveFilters = Object.keys(mgr.selectedIndicesByItem).length > 0;
+      var selectedIndices = mgr.getSelectedIndices();
+
+      if (hasActiveFilters && selectedIndices.size === 0) {
+        datamap.selected.fill(-1.0);
+        var idx = datamap.layers.indexOf(datamap.pointLayer);
+        if (idx !== -1) {
+          var corrected = datamap.pointLayer.clone({
+            radiusMinPixels: datamap.pointRadiusMinPixels,
+            radiusMaxPixels: datamap.pointRadiusMaxPixels,
+          });
+          datamap.layers[idx] = corrected;
+          datamap.pointLayer = corrected;
+          datamap.deckgl.setProps({ layers: [...datamap.layers] });
+        }
+      }
+
       if (datamap._pointLabels) {
-        var mgr = datamap.dataSelectionManager;
-        var hasSelections = Object.keys(mgr.selectedIndicesByItem).length > 0;
         datamap._pointLabels.updateVisibility(
-          hasSelections ? mgr.getSelectedIndices() : null
+          hasActiveFilters ? selectedIndices : null
         );
       }
     };
