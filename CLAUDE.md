@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A Python data pipeline that analyzes the top 10,000 most-starred GitHub repositories. It enumerates candidates via BigQuery, fetches repo data via GraphQL direct lookups, embeds READMEs, reduces dimensionality, labels topics via LLM-driven topic modeling, and produces an interactive 2D visualization map (`github_map.html`).
+A Python data pipeline that analyzes the top 10,000 most-starred GitHub repositories. It enumerates candidates via BigQuery, fetches repo data via GraphQL direct lookups, embeds READMEs, reduces dimensionality, labels topics via LLM-driven topic modeling, and produces an interactive 2D visualization map (`data/github_map.html`).
 
 ## Running the Pipeline
 
@@ -20,7 +20,7 @@ python 01b_summarize_readmes.py       # Add LLM summaries, taglines, and target 
 python 02_embed_readmes.py            # Embed READMEs via Cohere → embeddings.npz
 python 03_reduce_umap.py              # UMAP 512-dim → 2D → umap_coords.npz
 python 04_label_topics.py             # Toponymy + Claude Sonnet topic labels → labels.parquet
-python 05_visualize.py                # DataMapPlot interactive HTML → github_map.html
+python 05_visualize.py                # DataMapPlot interactive HTML → data/github_map.html + docs/index.html
 ```
 
 **Two-phase fetch approach:** Step 00 queries GH Archive on BigQuery for repos with significant recent star activity, producing a generous candidate list (~25K). Step 01 then looks up each candidate via `repository(owner:, name:)` GraphQL queries (batched 50 per request), sorts by stars, and keeps the top 10K. This avoids the Search API's 1,000-result cap and non-deterministic ordering.
@@ -42,16 +42,18 @@ Set in `.env` (loaded by `python-dotenv`):
 **Sequential data pipeline** — each script reads outputs from previous stages:
 
 ```
-candidates.csv ──> repos.parquet ──┬──> embeddings.npz ──> umap_coords.npz ──> labels.parquet
-                                   │                                                │
-                                   └────────────────────────────────────────────────┴──> github_map.html
+candidates.csv ──> metadata.parquet ──> repos.parquet ──┬──> embeddings.npz ──> umap_coords.npz ──> labels.parquet
+                                                        │                                                │
+                                                        └────────────────────────────────────────────────┴──> github_map.html
 ```
+
+`metadata.parquet` is the intermediate output of `01_fetch_repos.py`'s metadata-only pass; `repos.parquet` is the final output after README fetching.
 
 **`config.py`** is the central configuration hub: all file paths, API keys, and constants (batch sizes, model names, target counts) are defined here. Every pipeline script imports from it.
 
 **Key technology choices:**
 - BigQuery (GH Archive) for reliable repo enumeration
-- GraphQL `repository()` direct lookups for metadata + READMEs (batched 25/request)
+- GraphQL `repository()` direct lookups for metadata + READMEs (batched 25–50/request)
 - Cohere `embed-v4.0` (512-dim) for README embeddings
 - UMAP (n_neighbors=15, min_dist=0.05, cosine) for dimensionality reduction (512D → 2D)
 - Toponymy library for hierarchical topic clustering with LLM-generated labels
@@ -65,7 +67,7 @@ candidates.csv ──> repos.parquet ──┬──> embeddings.npz ──> uma
 
 ## Data Directory
 
-All outputs go to `data/` (gitignored). Key files: `candidates.csv`, `repos.parquet`, `embeddings.npz`, `umap_coords.npz`, `labels.parquet`, `toponymy_model.joblib`, `github_map.html`.
+All outputs go to `data/` (gitignored). Key files: `candidates.csv`, `metadata.parquet`, `repos.parquet`, `embeddings.npz`, `umap_coords.npz`, `labels.parquet`, `toponymy_model.joblib`, `github_map.html`.
 
 ## Visualization Details
 
@@ -76,3 +78,4 @@ All outputs go to `data/` (gitignored). Key files: `candidates.csv`, `repos.parq
 - `docs/methodology.html` — **hand-authored source file**. Edit it directly for methodology content changes.
 - `docs/index.html` — **generated output** from `05_visualize.py` (copy of `data/github_map.html` with adjusted links). Do not edit directly.
 - `data/methodology.html` — **generated copy** of `docs/methodology.html` with nav links adjusted (`index.html` → `github_map.html`) for local use.
+- `docs/filter_panel.html` — **hand-authored HTML snippet** injected by `05_visualize.py` into the final map as the filter sidebar.

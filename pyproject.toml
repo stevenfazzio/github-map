@@ -18,6 +18,8 @@ dependencies = [
     "tqdm",
     "python-dotenv",
     "sentence-transformers",
+    "nest-asyncio",
+    "scikit-learn",
 ]
 
 [project.optional-dependencies]
