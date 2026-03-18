@@ -238,14 +238,14 @@ tr.param-group td { font-weight: 700; color: #0d9488; border-bottom: 2px solid #
 
 <div class="pipeline-step">
   <strong>5. Reduce to 2D</strong>
-  <p>Applies UMAP (n_neighbors=15, min_dist=0.05, cosine metric) to project the
+  <p>Applies UMAP (<code>n_neighbors=15</code>, <code>min_dist=0.05</code>, <code>metric="cosine"</code>) to project the
   512-dimensional embeddings down to 2D coordinates for map placement.</p>
 </div>
 
 <div class="pipeline-step">
   <strong>6. Label topics</strong>
   <p>Uses the Toponymy library for hierarchical density-based clustering
-  (<code>min_clusters=4</code>, detail levels 0.5&ndash;1.0), then sends
+  (<code>min_clusters=4</code>, <code>lowest_detail_level=0.5</code>, <code>highest_detail_level=1.0</code>), then sends
   representative documents from each cluster to Claude Sonnet to generate human-readable
   topic labels at multiple levels of detail.</p>
 </div>
