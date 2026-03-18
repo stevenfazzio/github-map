@@ -1132,12 +1132,14 @@ window.addEventListener('datamapReady', function() {
     if (visibleChild) {
       legendContent.innerHTML = visibleChild.innerHTML;
       legendPopover.classList.add('visible');
+      legendToggle.style.removeProperty('display');
     } else {
       legendContent.innerHTML = '';
       legendPopover.classList.remove('visible');
       legendOpen = false;
       legendContent.style.display = 'none';
       legendToggle.innerHTML = 'Legend +';
+      legendToggle.style.setProperty('display', 'none', 'important');
     }
   }
 
