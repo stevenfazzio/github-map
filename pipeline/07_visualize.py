@@ -741,13 +741,12 @@ def _inject_filters(html_path, df, languages):
     html = Path(html_path).read_text()
 
     # 1. Dispatch datamapReady event after metadata finishes loading
-    html = html.replace(
-        "updateProgressBar('meta-data-progress', 100);\n      checkAllDataLoaded();",
-        "updateProgressBar('meta-data-progress', 100);\n"
-        "      window.dispatchEvent(new CustomEvent('datamapReady', "
-        "{ detail: { datamap, hoverData } }));\n"
-        "      checkAllDataLoaded();",
-        1,
+    html = re.sub(
+        r"(updateProgressBar\('meta-data-progress', 100\);\s*)(checkAllDataLoaded\(\);)",
+        r"\1window.dispatchEvent(new CustomEvent('datamapReady', "
+        r"{ detail: { datamap, hoverData } }));\n          \2",
+        html,
+        count=1,
     )
 
     # 2. CSS fixes for content-wrapper (runs after _inject_nav, no conflicts)
