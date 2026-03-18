@@ -5,6 +5,7 @@ import io
 import json
 import re
 from datetime import datetime, timezone
+from html import escape
 from pathlib import Path
 
 import datamapplot
@@ -400,6 +401,18 @@ def main():
         if "target_audience" in df.columns
         else ["Developers"] * len(df)
     )
+
+    # HTML-escape text fields that flow into hover tooltip innerHTML to prevent XSS.
+    # Escape at the rendering boundary, not at storage, so stored data stays clean.
+    def _esc(values):
+        return [escape(str(v)) for v in values]
+
+    project_titles = _esc(project_titles)
+    taglines = _esc(taglines)
+    summaries = _esc(summaries)
+    owners = _esc(df["full_name"].str.split("/").str[0].values)
+    hover_langs = _esc(hover_langs)
+
     search_text = [
         f"{fn} {title} {lang or ''} {tag} {aud} {summ}"
         for fn, title, lang, tag, aud, summ in zip(
@@ -411,10 +424,11 @@ def main():
     project_type_colors = [
         type_color_mapping.get(pt, "#8b6cc1") if has_project_type else "#8b6cc1" for pt in project_type_values
     ]
+    project_type_values = _esc(project_type_values)
     extra_data = pd.DataFrame(
         {
             "full_name": df["full_name"].values,
-            "owner": df["full_name"].str.split("/").str[0].values,
+            "owner": owners,
             "project_title": project_titles,
             "project_type": project_type_values,
             "project_type_color": project_type_colors,
@@ -727,13 +741,12 @@ def _inject_filters(html_path, df, languages):
     html = Path(html_path).read_text()
 
     # 1. Dispatch datamapReady event after metadata finishes loading
-    html = html.replace(
-        "updateProgressBar('meta-data-progress', 100);\n      checkAllDataLoaded();",
-        "updateProgressBar('meta-data-progress', 100);\n"
-        "      window.dispatchEvent(new CustomEvent('datamapReady', "
-        "{ detail: { datamap, hoverData } }));\n"
-        "      checkAllDataLoaded();",
-        1,
+    html = re.sub(
+        r"(updateProgressBar\('meta-data-progress', 100\);\s*)(checkAllDataLoaded\(\);)",
+        r"\1window.dispatchEvent(new CustomEvent('datamapReady', "
+        r"{ detail: { datamap, hoverData } }));\n          \2",
+        html,
+        count=1,
     )
 
     # 2. CSS fixes for content-wrapper (runs after _inject_nav, no conflicts)
