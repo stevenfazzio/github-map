@@ -731,6 +731,9 @@ def main():
     _inject_filters(GITHUB_MAP_HTML, df, languages)
     print("Injected filter panel into map")
 
+    _inject_mobile_support(GITHUB_MAP_HTML)
+    print("Injected mobile support")
+
     _write_methodology(METHODOLOGY_HTML)
     print(f"Saved methodology page to {METHODOLOGY_HTML}")
 
@@ -872,6 +875,181 @@ def _inject_filters(html_path, df, languages):
     # 8. Inject JS before </html>
     point_labels_js = "<script>" + _build_point_labels_js() + "</script>"
     html = html.replace("</html>", js_section + "\n" + point_labels_js + "\n</html>", 1)
+
+    Path(html_path).write_text(html)
+
+
+# ── Mobile support ────────────────────────────────────────────────────────────
+
+MOBILE_CSS = """<style>
+@media (max-width: 768px) {
+  #title-container span:first-child {
+    font-size: 18pt !important;
+    line-height: 1.1 !important;
+  }
+  #title-container span:last-of-type {
+    font-size: 10pt !important;
+    line-height: 1.2 !important;
+  }
+  #title-container {
+    margin: 4px 8px !important;
+    padding: 8px 10px !important;
+  }
+  .container-box {
+    margin: 3px 8px !important;
+    padding: 8px 10px !important;
+  }
+  .site-nav {
+    padding: 0 12px !important;
+    gap: 12px !important;
+    font-size: 13px !important;
+  }
+  .content-wrapper {
+    min-height: calc(100vh - 52px) !important;
+  }
+  .stack.bottom-left {
+    padding-bottom: 4px !important;
+  }
+  #colormap-selector-container {
+    max-width: calc(100vw - 24px);
+  }
+  .color-map-options {
+    max-height: 60vh !important;
+  }
+}
+
+/* Mobile touch info card */
+#mobile-info-card {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 300;
+  background: linear-gradient(135deg, #fffffffa, #f8f9fefa);
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.12);
+  padding: 16px 20px calc(env(safe-area-inset-bottom, 8px) + 12px);
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  pointer-events: auto;
+  max-height: 55vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+#mobile-info-card.visible { display: block; }
+#mobile-info-card .mic-close {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: #666;
+  cursor: pointer;
+  padding: 4px 8px;
+  line-height: 1;
+}
+#mobile-info-card .mic-visit {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 8px 16px;
+  background: #0d9488;
+  color: #fff;
+  text-decoration: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+#mobile-info-card .mic-visit:active {
+  background: #0b7c72;
+}
+</style>"""
+
+MOBILE_HTML = """<div id="mobile-info-card">
+  <button class="mic-close" aria-label="Close">&times;</button>
+  <div class="mic-body"></div>
+</div>"""
+
+MOBILE_JS = """<script>
+(function() {
+  var isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  if (!isTouchDevice) return;
+
+  var card = document.getElementById('mobile-info-card');
+  var cardBody = card.querySelector('.mic-body');
+  var closeBtn = card.querySelector('.mic-close');
+
+  closeBtn.addEventListener('click', function() {
+    card.classList.remove('visible');
+  });
+
+  // Close on background tap (outside the card)
+  document.addEventListener('click', function(e) {
+    if (card.classList.contains('visible') && !card.contains(e.target)) {
+      card.classList.remove('visible');
+    }
+  });
+
+  window.addEventListener('datamapReady', function(e) {
+    var datamap = e.detail.datamap;
+    var hoverData = e.detail.hoverData;
+    if (!datamap || !hoverData) return;
+
+    // Override the click handler to show info card instead of navigating
+    datamap.deckgl.setProps({
+      onClick: function(info, event) {
+        if (!info.picked) return;
+        var idx = info.index;
+        var fullName = hoverData.full_name[idx];
+        var title = hoverData.project_title ? hoverData.project_title[idx] : fullName;
+        var owner = hoverData.owner ? hoverData.owner[idx] : '';
+        var tagline = hoverData.tagline ? hoverData.tagline[idx] : '';
+        var summary = hoverData.summary ? hoverData.summary[idx] : '';
+        var lang = hoverData.hover_lang ? hoverData.hover_lang[idx] : '';
+        var stars = hoverData.hover_stars ? hoverData.hover_stars[idx] : '';
+        var forks = hoverData.hover_forks ? hoverData.hover_forks[idx] : '';
+        var projType = hoverData.project_type ? hoverData.project_type[idx] : '';
+        var projColor = hoverData.project_type_color ? hoverData.project_type_color[idx] : '#888';
+
+        var html = '<div class="hc">'
+          + '<div class="hc-header"><div class="hc-title">' + title + '</div>'
+          + '<div class="hc-repo">' + owner + '</div></div>'
+          + (tagline ? '<div class="hc-tagline">' + tagline + '</div>' : '')
+          + '<div class="hc-classify">'
+          + '<span class="hc-type" style="background:' + projColor + '30">' + projType + '</span>'
+          + '<span class="hc-chip hc-lang">' + lang + '</span></div>'
+          + '<div class="hc-stats"><span class="hc-chip">\\u2605 ' + stars + '</span>'
+          + '<span class="hc-chip">\\u2442 ' + forks + '</span></div>'
+          + (summary ? '<div class="hc-summary">' + summary + '</div>' : '')
+          + '<a class="mic-visit" href="https://github.com/' + fullName + '" target="_blank" rel="noopener">'
+          + 'Visit on GitHub \\u2192</a>'
+          + '</div>';
+        cardBody.innerHTML = html;
+        card.classList.add('visible');
+
+        if (typeof plausible !== 'undefined') {
+          plausible('Repo Click', {props: {repo: fullName}});
+        }
+      }
+    });
+  });
+})();
+</script>"""
+
+
+def _inject_mobile_support(html_path):
+    """Add mobile-specific CSS, HTML, and touch interaction support."""
+    html = Path(html_path).read_text()
+
+    # Inject mobile CSS before </head>
+    html = html.replace("</head>", MOBILE_CSS + "\n</head>", 1)
+
+    # Inject mobile info card HTML before </body>
+    html = html.replace("</body>", MOBILE_HTML + "\n</body>", 1)
+
+    # Inject mobile JS before </html>
+    html = html.replace("</html>", MOBILE_JS + "\n</html>", 1)
 
     Path(html_path).write_text(html)
 
