@@ -112,12 +112,12 @@ code { font-size: 14px; background: #f0fdfa; color: #134e4a; padding: 2px 6px; b
 <h2 id="corpus-collection">Corpus Collection <a href="#corpus-collection" class="anchor">#</a></h2>
 <p>
   The pipeline uses a two-phase approach to identify the top 10,000 most-starred repositories.
-  First, <code>00_enumerate_repos.py</code> queries GH Archive on BigQuery for repositories
-  with significant recent star activity, producing a generous candidate list (~25K repos).
-  Then, <code>01_fetch_repos.py</code> looks up each candidate via <code>repository(owner:, name:)</code>
-  GraphQL queries (batched 50 per request), collecting metadata (name, stars, language, license,
-  creation date) and the full README content. Results are sorted by star count and the top
-  10,000 are kept. This avoids the Search API's 1,000-result cap and non-deterministic ordering.
+  First, it queries GH Archive on BigQuery for repositories with significant recent star
+  activity, producing a generous candidate list (~25K repos). Then, each candidate is looked
+  up via the GitHub GraphQL API (batched 25–50 per request), collecting metadata (name, stars,
+  language, license, creation date) and the full README content. Results are sorted by star
+  count and the top 10,000 are kept. This avoids the Search API's 1,000-result cap and
+  non-deterministic ordering.
 </p>
 <p>
   Repositories whose READMEs are shorter than 200 characters after stripping whitespace are
@@ -133,55 +133,53 @@ code { font-size: 14px; background: #f0fdfa; color: #134e4a; padding: 2px 6px; b
 
 <div class="pipeline-step">
   <strong>0. Enumerate candidates</strong>
-  <p><code>00_enumerate_repos.py</code> &mdash; Queries GH Archive on BigQuery for repositories
-  with significant recent star activity, producing a generous candidate list (~25K repos)
-  saved to <code>candidates.csv</code>. This step is optional &mdash; a committed
-  <code>candidates.csv</code> fallback is used automatically if this step is skipped.</p>
+  <p>Queries GH Archive on BigQuery for repositories with significant recent star activity,
+  producing a generous candidate list (~25K repos). This step is optional &mdash; a
+  pre-built candidate list is used automatically if this step is skipped.</p>
 </div>
 
 <div class="pipeline-step">
   <strong>1. Fetch repositories</strong>
-  <p><code>01_fetch_repos.py</code> &mdash; Looks up each candidate via <code>repository(owner:, name:)</code>
-  GraphQL queries (batched 50 per request), fetching metadata and README content,
-  then sorts by stars and keeps the top 10,000 in <code>repos.parquet</code>.</p>
+  <p>Looks up each candidate via the GitHub GraphQL API (batched 25–50 per request), fetching
+  metadata and README content, then sorts by stars and keeps the top 10,000.</p>
 </div>
 
 <div class="pipeline-step">
   <strong>2. Select top repos</strong>
-  <p><code>02_select_top_repos.py</code> &mdash; Trims <code>repos.parquet</code> to the top
-  10,000 repositories by star count, backing up the original before trimming.</p>
+  <p>Trims the dataset to the top 10,000 repositories by star count, backing up the
+  original before trimming.</p>
 </div>
 
 <div class="pipeline-step">
   <strong>3. Summarize READMEs</strong>
-  <p><code>03_summarize_readmes.py</code> &mdash; Sends each README to Claude Haiku to produce
-  a short natural-language summary, stored back into <code>repos.parquet</code>.</p>
+  <p>Sends each README to Claude Haiku to extract a project title, short summary,
+  tagline, project type, and target audience &mdash; used for hover tooltips, search,
+  and colormap categories.</p>
 </div>
 
 <div class="pipeline-step">
   <strong>4. Embed READMEs</strong>
-  <p><code>04_embed_readmes.py</code> &mdash; Encodes README text into 512-dimensional vectors
-  using Cohere's <code>embed-v4.0</code> model, saved to <code>embeddings.npz</code>.</p>
+  <p>Encodes README text into 512-dimensional vectors using Cohere's embed-v4.0 model.</p>
 </div>
 
 <div class="pipeline-step">
   <strong>5. Reduce to 2D</strong>
-  <p><code>05_reduce_umap.py</code> &mdash; Applies UMAP (n_neighbors=15, min_dist=0.05, cosine metric)
-  to project from 512D to 2D coordinates in <code>umap_coords.npz</code>.</p>
+  <p>Applies UMAP (n_neighbors=15, min_dist=0.05, cosine metric) to project the
+  512-dimensional embeddings down to 2D coordinates for map placement.</p>
 </div>
 
 <div class="pipeline-step">
   <strong>6. Label topics</strong>
-  <p><code>06_label_topics.py</code> &mdash; Uses the Toponymy library for hierarchical density-based
-  clustering, then sends representative documents from each cluster to Claude Sonnet
-  to generate human-readable topic labels at multiple levels of detail, saved to <code>labels.parquet</code>.</p>
+  <p>Uses the Toponymy library for hierarchical density-based clustering, then sends
+  representative documents from each cluster to Claude Sonnet to generate human-readable
+  topic labels at multiple levels of detail.</p>
 </div>
 
 <div class="pipeline-step">
   <strong>7. Visualize</strong>
-  <p><code>07_visualize.py</code> &mdash; Combines coordinates, labels, and metadata into an
-  interactive HTML map using DataMapPlot, with multiple colormaps, search, hover tooltips,
-  and click-to-open functionality.</p>
+  <p>Combines coordinates, labels, and metadata into an interactive HTML map using
+  DataMapPlot, with multiple colormaps, search, hover tooltips, and click-to-open
+  functionality.</p>
 </div>
 
 <h2 id="tools">Tools &amp; Technologies <a href="#tools" class="anchor">#</a></h2>
@@ -209,7 +207,7 @@ code { font-size: 14px; background: #f0fdfa; color: #134e4a; padding: 2px 6px; b
   <li><strong>Click</strong> &mdash; Click any point to open the repository on GitHub in a new tab.</li>
   <li><strong>Search</strong> &mdash; Use the search box to find specific repositories by name.</li>
   <li><strong>Colormaps</strong> &mdash; Switch between colormaps using the dropdown to color points
-  by language, star count, license, creation date, activity status, owner type, activity recency, fork count, or open issues.</li>
+  by language, license family, project type, target audience, activity status, owner type, creation date, last push recency, star count, fork count, or open issues.</li>
   <li><strong>Topic labels</strong> &mdash; Cluster labels appear on the map at multiple levels of detail,
   from broad categories down to specific sub-topics. The number of levels is chosen
   automatically by the clustering algorithm.</li>
@@ -222,13 +220,14 @@ code { font-size: 14px; background: #f0fdfa; color: #134e4a; padding: 2px 6px; b
   </thead>
   <tbody>
     <tr><td>Primary Language</td><td>The repository's primary programming language as reported by GitHub. The top 9 languages are shown individually; all others are grouped as "Other".</td></tr>
-    <tr><td>Star Count (log10)</td><td>Base-10 logarithm of the repository's star count. Log scale helps distinguish differences among highly-starred repos.</td></tr>
-    <tr><td>License Type</td><td>The specific license identified by GitHub (e.g., MIT, Apache-2.0, GPL-3.0). Repos without a detected license show as "None".</td></tr>
     <tr><td>License Family</td><td>Licenses grouped into families: MIT, Apache, GPL, BSD, Creative Commons, MPL, Other Permissive, and Unknown/None.</td></tr>
-    <tr><td>Created Date</td><td>The date the repository was created on GitHub. Older repos appear blue; newer repos appear yellow.</td></tr>
+    <tr><td>Project Type</td><td>The type of project as classified by Claude Haiku: Library, Framework, CLI Tool, Application, Dataset, Tutorial/Educational, Collection/Awesome List, Plugin/Extension, API/Service, Research, or Other.</td></tr>
+    <tr><td>Target Audience</td><td>The intended audience as classified by Claude Haiku: Developers, Data &amp; ML Engineers, DevOps &amp; Infrastructure, System Programmers, Security Professionals, End Users, Learners &amp; Educators, or Researchers.</td></tr>
     <tr><td>Activity Status</td><td>Three categories based on archive status and recent activity: <strong>Active</strong> (not archived, pushed within the last 2 years), <strong>Inactive</strong> (not archived, no push in 2+ years), <strong>Archived</strong> (explicitly archived by the owner).</td></tr>
     <tr><td>Owner Type</td><td>Whether the repository is owned by an individual User or an Organization account.</td></tr>
-    <tr><td>Last Push (days ago)</td><td>Days since the most recent push to the repository. Green indicates recent activity; red indicates staleness.</td></tr>
+    <tr><td>Created Date</td><td>The date the repository was created on GitHub. Older repos appear in darker tones; newer repos appear brighter.</td></tr>
+    <tr><td>Last Push (days, log10)</td><td>Base-10 logarithm of days since the most recent push. Green indicates recent activity; red indicates staleness.</td></tr>
+    <tr><td>Star Count (log10)</td><td>Base-10 logarithm of the repository's star count. Log scale helps distinguish differences among highly-starred repos.</td></tr>
     <tr><td>Fork Count (log10)</td><td>Base-10 logarithm of the repository's fork count. Log scale helps distinguish differences among heavily-forked repos.</td></tr>
     <tr><td>Open Issues (log10)</td><td>Base-10 logarithm of the repository's open issue count. Log scale normalizes the wide range of issue counts.</td></tr>
   </tbody>
