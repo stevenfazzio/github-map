@@ -119,6 +119,67 @@ tr.param-group td { font-weight: 700; color: #0d9488; border-bottom: 2px solid #
   visualization.
 </p>
 
+<svg viewBox="0 0 400 450" xmlns="http://www.w3.org/2000/svg" style="display:block;margin:24px auto 40px;max-width:360px;width:100%;font-family:'IBM Plex Sans',system-ui,sans-serif" aria-label="Pipeline flow diagram">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#0d9488"/>
+    </marker>
+    <style>
+      .box { fill: #f0fdfa; stroke: #0d9488; stroke-width: 1.5; rx: 8; }
+      .box-label { fill: #134e4a; font-size: 13px; font-weight: 500; text-anchor: middle; dominant-baseline: central; }
+      .connector { stroke: #0d9488; stroke-width: 1.5; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <!-- 10K GitHub Repos -->
+  <rect class="box" x="110" y="10" width="180" height="38"/>
+  <text class="box-label" x="200" y="29">10K GitHub Repos</text>
+
+  <!-- Arrow down to README text -->
+  <line class="connector" x1="200" y1="48" x2="200" y2="67"/>
+
+  <!-- README Text -->
+  <rect class="box" x="120" y="72" width="160" height="38"/>
+  <text class="box-label" x="200" y="91">README Text</text>
+
+  <!-- Fork: two arrows out -->
+  <path class="connector" d="M155,110 L105,143"/>
+  <path class="connector" d="M245,110 L295,143"/>
+
+  <!-- LLM Summarize (left branch) -->
+  <rect class="box" x="20" y="148" width="160" height="38"/>
+  <text class="box-label" x="100" y="167">LLM Summarize</text>
+
+  <!-- Embed 512D (right branch) -->
+  <rect class="box" x="220" y="148" width="160" height="38"/>
+  <text class="box-label" x="300" y="167">Embed (512D)</text>
+
+  <!-- Arrow down from Embed to UMAP -->
+  <line class="connector" x1="300" y1="186" x2="300" y2="219"/>
+
+  <!-- UMAP → 2D -->
+  <rect class="box" x="220" y="224" width="160" height="38"/>
+  <text class="box-label" x="300" y="243">UMAP → 2D</text>
+
+  <!-- Arrow down from UMAP to Cluster & Label -->
+  <line class="connector" x1="300" y1="262" x2="300" y2="295"/>
+
+  <!-- Cluster & Label -->
+  <rect class="box" x="220" y="300" width="160" height="38"/>
+  <text class="box-label" x="300" y="319">Cluster &amp; Label</text>
+
+  <!-- Left branch vertical line (no arrow, just extends down) -->
+  <line x1="100" y1="186" x2="100" y2="370" stroke="#0d9488" stroke-width="1.5" fill="none"/>
+
+  <!-- Merge: two arrows converging -->
+  <path class="connector" d="M100,370 L150,393"/>
+  <path class="connector" d="M300,338 L250,393"/>
+
+  <!-- Interactive Map -->
+  <rect class="box" x="110" y="398" width="180" height="38"/>
+  <text class="box-label" x="200" y="417">Interactive Map</text>
+</svg>
+
 <h2 id="corpus-collection">Corpus Collection <a href="#corpus-collection" class="anchor">#</a></h2>
 <p>
   The pipeline uses a two-phase approach to identify the top 10,000 most-starred repositories.
