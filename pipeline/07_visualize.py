@@ -907,6 +907,13 @@ def _inject_nav(html_path):
   <a href="methodology.html">Methodology</a>
 </nav>"""
 
+    # Inject viewport meta tag for proper mobile rendering
+    html = html.replace(
+        "</head>",
+        '<meta name="viewport" content="width=device-width, initial-scale=1">\n</head>',
+        1,
+    )
+
     # Inject Plausible analytics before </head>
     html = html.replace("</head>", PLAUSIBLE_SNIPPET + "\n</head>", 1)
 
