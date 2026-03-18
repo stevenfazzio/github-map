@@ -33,6 +33,17 @@ METHODOLOGY_SOURCE_HTML = Path(__file__).resolve().parent.parent / "docs" / "met
 
 FILTER_PANEL_HTML = Path(__file__).resolve().parent.parent / "docs" / "filter_panel.html"
 
+PLAUSIBLE_SNIPPET = (
+    "<!-- Privacy-friendly analytics by Plausible -->\n"
+    '<script async src="https://plausible.io/js/pa-C-72mWcwGeg0tqYwWeOeE.js"></script>\n'
+    "<script>\n"
+    "  window.plausible=window.plausible||function()"
+    "{(plausible.q=plausible.q||[]).push(arguments)},"
+    "plausible.init=plausible.init||function(i){plausible.o=i||{}};\n"
+    "  plausible.init()\n"
+    "</script>"
+)
+
 LICENSE_TO_FAMILY = {
     "AGPL-3.0": "GPL",
     "GPL-2.0": "GPL",
@@ -695,7 +706,7 @@ def main():
         hover_text_html_template=hover_text_html_template,
         marker_size_array=marker_sizes,
         extra_point_data=extra_data,
-        on_click="window.open(`https://github.com/{full_name}`, '_blank')",
+        on_click="plausible('Repo Click',{{props:{{repo:`{full_name}`}}}});window.open(`https://github.com/{full_name}`,'_blank')",
         colormap_rawdata=all_rawdata,
         colormap_metadata=all_metadata,
         title="Semantic Map of GitHub",
@@ -895,6 +906,9 @@ def _inject_nav(html_path):
   <a href="github_map.html" class="active">Visualization</a>
   <a href="methodology.html">Methodology</a>
 </nav>"""
+
+    # Inject Plausible analytics before </head>
+    html = html.replace("</head>", PLAUSIBLE_SNIPPET + "\n</head>", 1)
 
     # Inject after <body> tag
     html = html.replace("<body>", f"<body>{nav_css}{nav_html}", 1)
