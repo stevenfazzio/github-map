@@ -904,8 +904,16 @@ MOBILE_CSS = """<style>
     gap: 12px !important;
     font-size: 13px !important;
   }
+  /* Fix mobile 100vh bug: dvh excludes browser chrome (URL bar, nav) */
+  body {
+    height: calc(100dvh - 44px) !important;
+  }
+  #deck-container {
+    height: calc(100dvh - 44px) !important;
+  }
   .content-wrapper {
-    min-height: calc(100vh - 52px) !important;
+    height: calc(100dvh - 44px) !important;
+    min-height: calc(100dvh - 52px) !important;
   }
   .stack.bottom-left {
     padding-bottom: 4px !important;
@@ -914,7 +922,7 @@ MOBILE_CSS = """<style>
     max-width: calc(100vw - 24px);
   }
   .color-map-options {
-    max-height: 60vh !important;
+    max-height: 50dvh !important;
   }
 }
 
