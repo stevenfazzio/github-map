@@ -1084,14 +1084,22 @@ window.addEventListener('datamapReady', function() {
   var cardBody = card.querySelector('.mic-body');
   var closeBtn = card.querySelector('.mic-close');
 
-  closeBtn.addEventListener('click', function() {
+  // clearHighlight is set once datamap is ready; until then it's a no-op.
+  var clearHighlight = function() {};
+
+  function hideCard() {
     card.classList.remove('visible');
+    clearHighlight();
+  }
+
+  closeBtn.addEventListener('click', function() {
+    hideCard();
   });
 
   // Close on background tap (outside the card)
   document.addEventListener('click', function(e) {
     if (card.classList.contains('visible') && !card.contains(e.target)) {
-      card.classList.remove('visible');
+      hideCard();
     }
   });
 
@@ -1162,6 +1170,22 @@ window.addEventListener('datamapReady', function() {
     // Initial sync after data loads
     setTimeout(syncLegend, 500);
 
+    // Wire up clearHighlight now that datamap is available.
+    clearHighlight = function() { setPointHighlight(-1); };
+
+    // Programmatically set the highlight on the point layer so it persists
+    // even when the mobile info card appears over the touch point (which
+    // causes a pointerleave on the canvas and clears autoHighlight).
+    function setPointHighlight(idx) {
+      var layer = datamap.pointLayer;
+      var layerIdx = datamap.layers.indexOf(layer);
+      if (layerIdx === -1) return;
+      var updated = layer.clone({ highlightedObjectIndex: idx });
+      datamap.layers[layerIdx] = updated;
+      datamap.pointLayer = updated;
+      datamap.deckgl.setProps({ layers: [...datamap.layers] });
+    }
+
     function showMobileCard(idx) {
       var fullName = hoverData.full_name[idx];
       var title = hoverData.project_title ? hoverData.project_title[idx] : fullName;
@@ -1189,6 +1213,7 @@ window.addEventListener('datamapReady', function() {
         + '</div>';
       cardBody.innerHTML = html;
       card.classList.add('visible');
+      setPointHighlight(idx);
 
       if (typeof plausible !== 'undefined') {
         plausible('Repo Click', {props: {repo: fullName}});
