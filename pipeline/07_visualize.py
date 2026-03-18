@@ -924,6 +924,82 @@ MOBILE_CSS = """<style>
   .color-map-options {
     max-height: 50dvh !important;
   }
+  /* Move legend into a toggleable popover on mobile */
+  #legend-container {
+    display: none !important;
+  }
+  #mobile-legend-toggle {
+    display: inline-flex !important;
+  }
+  #mobile-legend-popover {
+    display: block !important;
+  }
+  #mobile-legend-popover.visible .mobile-legend-content {
+    display: block;
+  }
+}
+
+/* Mobile legend toggle + popover (hidden on desktop) */
+#mobile-legend-toggle {
+  display: none;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border: 1px solid #aaaaaa77;
+  border-radius: 8px;
+  background: #ffffffaa;
+  backdrop-filter: blur(3px);
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  color: #333;
+  cursor: pointer;
+  pointer-events: auto;
+}
+#mobile-legend-popover {
+  display: none;
+  position: relative;
+  pointer-events: auto;
+}
+.mobile-legend-content {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  background: #ffffffee;
+  backdrop-filter: blur(6px);
+  border: 1px solid #aaaaaa77;
+  border-radius: 10px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  padding: 8px 10px;
+  max-height: 45dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  z-index: 150;
+  min-width: 140px;
+}
+.mobile-legend-content .legend-item {
+  padding: 2px 3px;
+}
+.mobile-legend-content .legend-label {
+  font-size: 11px;
+}
+.mobile-legend-content .color-swatch-box {
+  width: 10px;
+  height: 10px;
+}
+.mobile-legend-content .colorbar-container {
+  height: 150px;
+  padding: 6px;
+}
+.mobile-legend-content .colorbar {
+  height: 150px;
+}
+.mobile-legend-content .colorbar-tick-container {
+  height: 150px;
+}
+.mobile-legend-content .colorbar-tick-label {
+  font-size: 10px;
 }
 
 /* Mobile touch info card */
@@ -974,12 +1050,28 @@ MOBILE_CSS = """<style>
 }
 </style>"""
 
-MOBILE_HTML = """<div id="mobile-info-card">
+MOBILE_LEGEND_HTML = """<div id="mobile-legend-popover" class="stack-box">
+  <div class="mobile-legend-content"></div>
+  <button id="mobile-legend-toggle" type="button">Legend +</button>
+</div>"""
+
+MOBILE_INFOCARD_HTML = """<div id="mobile-info-card">
   <button class="mic-close" aria-label="Close">&times;</button>
   <div class="mic-body"></div>
 </div>"""
 
 MOBILE_JS = """<script>
+// Toggle colormap dropdown arrow direction (works on all devices)
+window.addEventListener('datamapReady', function() {
+  var opts = document.getElementById('colorMapOptions');
+  if (!opts) return;
+  var arrow = opts.parentElement.querySelector('.dropdown-arrow');
+  if (!arrow) return;
+  new MutationObserver(function() {
+    arrow.innerHTML = opts.style.display === 'none' ? '\\u25BC' : '\\u25B2';
+  }).observe(opts, { attributes: true, attributeFilter: ['style'] });
+});
+</script><script>
 (function() {
   var isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
   if (!isTouchDevice) return;
@@ -999,10 +1091,66 @@ MOBILE_JS = """<script>
     }
   });
 
+  // Mobile legend toggle
+  var legendPopover = document.getElementById('mobile-legend-popover');
+  var legendToggle = document.getElementById('mobile-legend-toggle');
+  var legendContent = legendPopover.querySelector('.mobile-legend-content');
+  var legendOpen = false;
+
+  legendToggle.addEventListener('click', function(e) {
+    e.stopPropagation();
+    legendOpen = !legendOpen;
+    legendContent.style.display = legendOpen ? 'block' : 'none';
+    legendToggle.innerHTML = legendOpen ? 'Legend \\u2212' : 'Legend +';
+  });
+
+  // Close legend on outside tap
+  document.addEventListener('click', function(e) {
+    if (legendOpen && !legendPopover.contains(e.target)) {
+      legendOpen = false;
+      legendContent.style.display = 'none';
+      legendToggle.innerHTML = 'Legend +';
+    }
+  });
+
+  // Sync desktop legend content into mobile popover
+  function syncLegend() {
+    var desktopLegend = document.getElementById('legend-container');
+    if (!desktopLegend) return;
+    // Find the currently visible legend child
+    var visibleChild = null;
+    for (var i = 0; i < desktopLegend.children.length; i++) {
+      if (desktopLegend.children[i].style.display !== 'none') {
+        visibleChild = desktopLegend.children[i];
+        break;
+      }
+    }
+    if (visibleChild) {
+      legendContent.innerHTML = visibleChild.innerHTML;
+      legendPopover.classList.add('visible');
+    } else {
+      legendContent.innerHTML = '';
+      legendPopover.classList.remove('visible');
+      legendOpen = false;
+      legendContent.style.display = 'none';
+      legendToggle.innerHTML = 'Legend +';
+    }
+  }
+
+  // Watch for legend changes via MutationObserver
+  var desktopLegend = document.getElementById('legend-container');
+  if (desktopLegend) {
+    var observer = new MutationObserver(syncLegend);
+    observer.observe(desktopLegend, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
+  }
+
   window.addEventListener('datamapReady', function(e) {
     var datamap = e.detail.datamap;
     var hoverData = e.detail.hoverData;
     if (!datamap || !hoverData) return;
+
+    // Initial sync after data loads
+    setTimeout(syncLegend, 500);
 
     // Override the click handler to show info card instead of navigating
     datamap.deckgl.setProps({
@@ -1053,8 +1201,15 @@ def _inject_mobile_support(html_path):
     # Inject mobile CSS before </head>
     html = html.replace("</head>", MOBILE_CSS + "\n</head>", 1)
 
+    # Inject mobile legend popover inside bottom-left stack, before colormap
+    html = html.replace(
+        '<div id="colormap-selector-container"',
+        MOBILE_LEGEND_HTML + '\n<div id="colormap-selector-container"',
+        1,
+    )
+
     # Inject mobile info card HTML before </body>
-    html = html.replace("</body>", MOBILE_HTML + "\n</body>", 1)
+    html = html.replace("</body>", MOBILE_INFOCARD_HTML + "\n</body>", 1)
 
     # Inject mobile JS before </html>
     html = html.replace("</html>", MOBILE_JS + "\n</html>", 1)
