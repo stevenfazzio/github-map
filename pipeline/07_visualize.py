@@ -706,7 +706,7 @@ def main():
         hover_text_html_template=hover_text_html_template,
         marker_size_array=marker_sizes,
         extra_point_data=extra_data,
-        on_click="plausible('Repo Click',{props:{repo:`{full_name}`}});window.open(`https://github.com/{full_name}`,'_blank')",
+        on_click="plausible('Repo Click',{{props:{{repo:`{full_name}`}}}});window.open(`https://github.com/{full_name}`,'_blank')",
         colormap_rawdata=all_rawdata,
         colormap_metadata=all_metadata,
         title="Semantic Map of GitHub",
