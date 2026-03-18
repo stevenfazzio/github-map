@@ -1122,11 +1122,15 @@ window.addEventListener('datamapReady', function() {
     var desktopLegend = document.getElementById('legend-container');
     if (!desktopLegend) return;
     // Find the currently visible legend child
+    // Also check if the container itself is hidden (Clusters colormap hides the container)
+    var containerHidden = desktopLegend.style.display === 'none';
     var visibleChild = null;
-    for (var i = 0; i < desktopLegend.children.length; i++) {
-      if (desktopLegend.children[i].style.display !== 'none') {
-        visibleChild = desktopLegend.children[i];
-        break;
+    if (!containerHidden) {
+      for (var i = 0; i < desktopLegend.children.length; i++) {
+        if (desktopLegend.children[i].style.display !== 'none') {
+          visibleChild = desktopLegend.children[i];
+          break;
+        }
       }
     }
     if (visibleChild) {
