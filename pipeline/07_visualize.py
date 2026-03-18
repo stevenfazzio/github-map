@@ -924,6 +924,10 @@ MOBILE_CSS = """<style>
   .color-map-options {
     max-height: 50dvh !important;
   }
+  /* Hide deck.gl hover tooltip on mobile — the mobile bottom sheet replaces it */
+  .deck-tooltip {
+    display: none !important;
+  }
   /* Move legend into a toggleable popover on mobile */
   #legend-container {
     display: none !important;
@@ -1152,41 +1156,49 @@ window.addEventListener('datamapReady', function() {
     // Initial sync after data loads
     setTimeout(syncLegend, 500);
 
-    // Override the click handler to show info card instead of navigating
+    function showMobileCard(idx) {
+      var fullName = hoverData.full_name[idx];
+      var title = hoverData.project_title ? hoverData.project_title[idx] : fullName;
+      var owner = hoverData.owner ? hoverData.owner[idx] : '';
+      var tagline = hoverData.tagline ? hoverData.tagline[idx] : '';
+      var summary = hoverData.summary ? hoverData.summary[idx] : '';
+      var lang = hoverData.hover_lang ? hoverData.hover_lang[idx] : '';
+      var stars = hoverData.hover_stars ? hoverData.hover_stars[idx] : '';
+      var forks = hoverData.hover_forks ? hoverData.hover_forks[idx] : '';
+      var projType = hoverData.project_type ? hoverData.project_type[idx] : '';
+      var projColor = hoverData.project_type_color ? hoverData.project_type_color[idx] : '#888';
+
+      var html = '<div class="hc">'
+        + '<div class="hc-header"><div class="hc-title">' + title + '</div>'
+        + '<div class="hc-repo">' + owner + '</div></div>'
+        + (tagline ? '<div class="hc-tagline">' + tagline + '</div>' : '')
+        + '<div class="hc-classify">'
+        + '<span class="hc-type" style="background:' + projColor + '30">' + projType + '</span>'
+        + '<span class="hc-chip hc-lang">' + lang + '</span></div>'
+        + '<div class="hc-stats"><span class="hc-chip">\\u2605 ' + stars + '</span>'
+        + '<span class="hc-chip">\\u2442 ' + forks + '</span></div>'
+        + (summary ? '<div class="hc-summary">' + summary + '</div>' : '')
+        + '<a class="mic-visit" href="https://github.com/' + fullName + '" target="_blank" rel="noopener">'
+        + 'Visit on GitHub \\u2192</a>'
+        + '</div>';
+      cardBody.innerHTML = html;
+      card.classList.add('visible');
+
+      if (typeof plausible !== 'undefined') {
+        plausible('Repo Click', {props: {repo: fullName}});
+      }
+    }
+
+    // Use onHover instead of onClick — on mobile, deck.gl's hover fires
+    // reliably on tap, while onClick often fails for nodes in the upper
+    // portion of the screen due to synthetic click-event timing issues.
     datamap.deckgl.setProps({
-      onClick: function(info, event) {
-        if (!info.picked) return;
-        var idx = info.index;
-        var fullName = hoverData.full_name[idx];
-        var title = hoverData.project_title ? hoverData.project_title[idx] : fullName;
-        var owner = hoverData.owner ? hoverData.owner[idx] : '';
-        var tagline = hoverData.tagline ? hoverData.tagline[idx] : '';
-        var summary = hoverData.summary ? hoverData.summary[idx] : '';
-        var lang = hoverData.hover_lang ? hoverData.hover_lang[idx] : '';
-        var stars = hoverData.hover_stars ? hoverData.hover_stars[idx] : '';
-        var forks = hoverData.hover_forks ? hoverData.hover_forks[idx] : '';
-        var projType = hoverData.project_type ? hoverData.project_type[idx] : '';
-        var projColor = hoverData.project_type_color ? hoverData.project_type_color[idx] : '#888';
-
-        var html = '<div class="hc">'
-          + '<div class="hc-header"><div class="hc-title">' + title + '</div>'
-          + '<div class="hc-repo">' + owner + '</div></div>'
-          + (tagline ? '<div class="hc-tagline">' + tagline + '</div>' : '')
-          + '<div class="hc-classify">'
-          + '<span class="hc-type" style="background:' + projColor + '30">' + projType + '</span>'
-          + '<span class="hc-chip hc-lang">' + lang + '</span></div>'
-          + '<div class="hc-stats"><span class="hc-chip">\\u2605 ' + stars + '</span>'
-          + '<span class="hc-chip">\\u2442 ' + forks + '</span></div>'
-          + (summary ? '<div class="hc-summary">' + summary + '</div>' : '')
-          + '<a class="mic-visit" href="https://github.com/' + fullName + '" target="_blank" rel="noopener">'
-          + 'Visit on GitHub \\u2192</a>'
-          + '</div>';
-        cardBody.innerHTML = html;
-        card.classList.add('visible');
-
-        if (typeof plausible !== 'undefined') {
-          plausible('Repo Click', {props: {repo: fullName}});
-        }
+      getTooltip: null,
+      onClick: function(info) {
+        if (info.picked) showMobileCard(info.index);
+      },
+      onHover: function(info) {
+        if (info.picked) showMobileCard(info.index);
       }
     });
   });
