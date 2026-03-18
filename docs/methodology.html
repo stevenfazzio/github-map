@@ -125,8 +125,11 @@ code { font-size: 14px; background: #f0fdfa; color: #134e4a; padding: 2px 6px; b
   pointers that lack sufficient content for meaningful embedding and map placement.
 </p>
 <p>
-  Each README is then summarized into a concise description using Claude Haiku, providing
-  clean hover-text for the visualization and a normalized input for downstream embedding.
+  Each README is processed by Claude Haiku to extract five fields: a project title,
+  a 2&ndash;3 sentence summary, a short tagline, a project type classification, and a
+  target audience label. These feed into hover tooltips, search, colormap categories,
+  and topic clustering. Separately, the raw README text (not the summaries) is embedded
+  in step 4 to drive map placement.
 </p>
 
 <h2 id="processing-pipeline">Processing Pipeline <a href="#processing-pipeline" class="anchor">#</a></h2>
@@ -170,7 +173,8 @@ code { font-size: 14px; background: #f0fdfa; color: #134e4a; padding: 2px 6px; b
 
 <div class="pipeline-step">
   <strong>6. Label topics</strong>
-  <p>Uses the Toponymy library for hierarchical density-based clustering, then sends
+  <p>Uses the Toponymy library for hierarchical density-based clustering
+  (<code>min_clusters=4</code>, detail levels 0.5&ndash;1.0), then sends
   representative documents from each cluster to Claude Sonnet to generate human-readable
   topic labels at multiple levels of detail.</p>
 </div>
@@ -192,8 +196,8 @@ code { font-size: 14px; background: #f0fdfa; color: #134e4a; padding: 2px 6px; b
     <tr><td><a href="https://github.com/lmcinnes/umap">UMAP</a></td><td>Dimensionality reduction from 512D to 2D</td></tr>
     <tr><td><a href="https://github.com/TutteInstitute/toponymy">Toponymy</a></td><td>Hierarchical density-based topic clustering</td></tr>
     <tr><td><a href="https://github.com/TutteInstitute/datamapplot">DataMapPlot</a></td><td>Interactive HTML map rendering</td></tr>
-    <tr><td><a href="https://www.anthropic.com/claude/haiku">Claude Haiku</a></td><td>README summarization</td></tr>
-    <tr><td><a href="https://www.anthropic.com/claude/sonnet">Claude Sonnet</a></td><td>Topic label generation</td></tr>
+    <tr><td><a href="https://www.anthropic.com/claude/haiku">Claude Haiku 4.5</a></td><td>README summarization</td></tr>
+    <tr><td><a href="https://www.anthropic.com/claude/sonnet">Claude Sonnet 4</a></td><td>Topic label generation</td></tr>
     <tr><td><a href="https://docs.github.com/en/graphql">GitHub GraphQL API</a></td><td>Repository metadata and README fetching</td></tr>
     <tr><td><a href="https://cloud.google.com/bigquery">BigQuery</a> (GH Archive)</td><td>Candidate repository enumeration</td></tr>
   </tbody>
@@ -202,10 +206,13 @@ code { font-size: 14px; background: #f0fdfa; color: #134e4a; padding: 2px 6px; b
 <h2 id="using-the-visualization">Using the Visualization <a href="#using-the-visualization" class="anchor">#</a></h2>
 <ul>
   <li><strong>Pan and zoom</strong> &mdash; Click and drag to pan; scroll to zoom in and out.</li>
-  <li><strong>Hover</strong> &mdash; Hover over any point to see the repository name, star count,
-  primary language, and a short summary.</li>
+  <li><strong>Hover</strong> &mdash; Hover over any point to see the project title, owner,
+  tagline, project type, primary language, star and fork counts, and a short summary.</li>
   <li><strong>Click</strong> &mdash; Click any point to open the repository on GitHub in a new tab.</li>
   <li><strong>Search</strong> &mdash; Use the search box to find specific repositories by name.</li>
+  <li><strong>Filter panel</strong> &mdash; Open the sidebar to narrow the visible points with range
+  sliders (stars, forks, open issues, created year, days since push) and checkbox filters
+  (language, activity status, license family, project type, target audience, owner type).</li>
   <li><strong>Colormaps</strong> &mdash; Switch between colormaps using the dropdown to color points
   by language, license family, project type, target audience, activity status, owner type, creation date, last push recency, star count, fork count, or open issues.</li>
   <li><strong>Topic labels</strong> &mdash; Cluster labels appear on the map at multiple levels of detail,
