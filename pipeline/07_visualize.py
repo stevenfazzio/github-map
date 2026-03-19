@@ -1323,6 +1323,13 @@ def _copy_for_docs(src_html_path, dest_html_path):
     html = html.replace('href="github_map.html"', 'href="index.html"')
     Path(dest_html_path).write_text(html)
 
+    # Copy social preview image to docs/ for GitHub Pages OG tags
+    social_preview_src = Path("assets/social-preview.png")
+    if social_preview_src.exists():
+        import shutil
+
+        shutil.copy2(social_preview_src, Path(dest_html_path).parent / "social-preview.png")
+
 
 def _inject_nav(html_path):
     """Add site navigation bar to DataMapPlot-generated HTML."""
@@ -1351,6 +1358,19 @@ def _inject_nav(html_path):
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n</head>',
         1,
     )
+
+    # Inject Open Graph meta tags for social sharing
+    og_desc = "Interactive 2D map of the top 10,000 most-starred GitHub repositories, positioned by README similarity."
+    og_base = "https://stevenfazzio.github.io/semantic-github-map"
+    og_tags = (
+        '<meta property="og:title" content="Semantic Map of GitHub">\n'
+        f'<meta property="og:description" content="{og_desc}">\n'
+        '<meta property="og:type" content="website">\n'
+        f'<meta property="og:image" content="{og_base}/social-preview.png">\n'
+        f'<meta property="og:url" content="{og_base}/">\n'
+        '<meta name="twitter:card" content="summary_large_image">\n'
+    )
+    html = html.replace("</head>", og_tags + "</head>", 1)
 
     # Inject Plausible analytics before </head>
     html = html.replace("</head>", PLAUSIBLE_SNIPPET + "\n</head>", 1)

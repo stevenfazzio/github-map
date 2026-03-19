@@ -2,6 +2,12 @@
 
 **[View the live map](https://stevenfazzio.github.io/semantic-github-map/)**
 
+<p align="center">
+  <a href="https://stevenfazzio.github.io/semantic-github-map/">
+    <img src="assets/screenshot.png" alt="Semantic map showing 10,000 GitHub repositories clustered by topic" width="720">
+  </a>
+</p>
+
 An interactive 2D map of the top 10,000 most-starred GitHub repositories, positioned by semantic similarity of their READMEs.
 
 The pipeline enumerates candidates via BigQuery, fetches repo metadata via GraphQL, embeds READMEs with Cohere, reduces to 2D with UMAP, generates topic labels with Claude, and renders an interactive HTML visualization with DataMapPlot.
