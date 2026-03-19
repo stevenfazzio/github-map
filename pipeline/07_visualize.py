@@ -148,11 +148,18 @@ def _build_edge_bundle(coords, embeddings):
     lc = LineCollection(lines, colors=seg_colors, linewidths=0.3, alpha=0.3)
     ax.add_collection(lc)
 
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png", transparent=True, dpi=100)
+    png_buf = io.BytesIO()
+    fig.savefig(png_buf, format="png", transparent=True, dpi=100)
     plt.close(fig)
-    buf.seek(0)
-    data_uri = f"data:image/png;base64,{base64.b64encode(buf.getvalue()).decode()}"
+    png_buf.seek(0)
+
+    # Convert to WebP lossless — much smaller for sparse RGBA images (80%
+    # transparent pixels with thin lines).  ~691 KB vs ~1.28 MB PNG.
+    from PIL import Image
+
+    webp_buf = io.BytesIO()
+    Image.open(png_buf).save(webp_buf, format="WEBP", lossless=True)
+    data_uri = f"data:image/webp;base64,{base64.b64encode(webp_buf.getvalue()).decode()}"
 
     print("Edge bundle complete.")
     return {"background_image": data_uri, "background_image_bounds": bounds}
