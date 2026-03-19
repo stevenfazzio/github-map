@@ -402,8 +402,8 @@ Respond with only the JSON object, no markdown fencing.</code></pre>
 <p>
   The most notable prior work in this space is Andrei Kashcha's
   <a href="https://anvaka.github.io/map-of-github/">Map of GitHub</a>
-  (<a href="https://github.com/nickolaev/map-of-github">source</a>), an impressive
-  visualization that maps roughly 400,000 GitHub repositories onto a zoomable,
+  (<a href="https://github.com/anvaka/map-of-github">source</a>), an impressive
+  visualization that maps roughly 690,000 GitHub repositories onto a zoomable,
   globe-style interface. It remains one of the most ambitious public efforts to
   spatially organize the open-source ecosystem.
 </p>
@@ -417,7 +417,7 @@ Respond with only the JSON object, no markdown fencing.</code></pre>
   nearby after UMAP reduction. The two approaches produce meaningfully
   different groupings: anvaka's map clusters repos that appeal to the same
   audience, while this map clusters repos that describe similar functionality.
-  The projects also differ in scale, with anvaka's covering ~400K repos
+  The projects also differ in scale, with anvaka's covering ~690K repos
   compared to 10K here.
 </p>
 <p>
@@ -427,7 +427,7 @@ Respond with only the JSON object, no markdown fencing.</code></pre>
   space. For rendering, anvaka's map uses MapLibre GL with vector tiles for
   smooth globe-style navigation, while this project uses DataMapPlot to
   produce a self-contained interactive HTML file. For topic labeling, anvaka
-  assigns names to roughly 1,100 cluster "countries" using ChatGPT, while this
+  assigns names to roughly 1,500 cluster "countries" using ChatGPT, while this
   project uses the Toponymy library to generate hierarchical multi-level labels
   via Claude Sonnet, producing labels at varying levels of detail rather than a
   single flat layer. Each approach reflects different design priorities, and
