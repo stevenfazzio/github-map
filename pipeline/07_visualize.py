@@ -87,6 +87,42 @@ def _inject_data_date(html):
     return html.replace("<!-- DATA_AS_OF -->", replacement)
 
 
+def _inject_map_data_date(html_path):
+    """Add a styled data-date badge below the subtitle in the map HTML."""
+    date_str = _data_as_of_date()
+    if not date_str:
+        return
+
+    badge_html = (
+        '<br /><span id="data-date-badge" style="'
+        "display: inline-block;"
+        "margin-top: 8px;"
+        "padding: 3px 10px;"
+        "font-family: 'IBM Plex Sans', sans-serif;"
+        "font-size: 11px;"
+        "font-weight: 500;"
+        "letter-spacing: 0.04em;"
+        "text-transform: uppercase;"
+        "color: #636c76;"
+        "background: rgba(99, 108, 118, 0.08);"
+        "border: 1px solid rgba(99, 108, 118, 0.15);"
+        "border-radius: 12px;"
+        f'">{date_str}</span>'
+    )
+
+    path = Path(html_path)
+    html = path.read_text()
+    # Insert badge inside title-container, just before its closing </div>
+    html = re.sub(
+        r'(<div\s+id="title-container"[^>]*>.*?)(</div>)',
+        rf"\1{badge_html}\2",
+        html,
+        count=1,
+        flags=re.DOTALL,
+    )
+    path.write_text(html)
+
+
 def _license_family(df):
     """Map license column to license family categories."""
     licenses = df["license"].fillna("").replace("", "None").values
@@ -709,8 +745,7 @@ def main():
         colormap_rawdata=all_rawdata,
         colormap_metadata=all_metadata,
         title="Semantic Map of GitHub",
-        sub_title="Top 10,000 most-starred repositories, mapped by README similarity"
-        + (f" · Data as of {date_str}" if (date_str := _data_as_of_date()) else ""),
+        sub_title="Top 10,000 most-starred repositories, mapped by README similarity",
         enable_search=True,
         search_field="",
         custom_js=CUSTOM_JS,
@@ -726,6 +761,9 @@ def main():
 
     _inject_nav(GITHUB_MAP_HTML)
     print("Injected navigation bar into map")
+
+    _inject_map_data_date(GITHUB_MAP_HTML)
+    print("Injected data date badge into map")
 
     _inject_filters(GITHUB_MAP_HTML, df, languages)
     print("Injected filter panel into map")
