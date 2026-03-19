@@ -70,6 +70,20 @@ pre.prompt-block {
 }
 pre.prompt-block code { background: none; padding: 0; border-radius: 0; font-size: inherit; color: inherit; }
 tr.param-group td { font-weight: 700; color: #0d9488; border-bottom: 2px solid #0d9488; padding-top: 14px; }
+@media (max-width: 600px) {
+  table { font-size: 14px; }
+  #parameters + p + table thead { display: none; }
+  #parameters + p + table,
+  #parameters + p + table tbody,
+  #parameters + p + table tr,
+  #parameters + p + table td { display: block; width: 100%; }
+  #parameters + p + table tr:not(.param-group) { padding: 10px 0; border-bottom: 1px solid #e0e0e0; }
+  #parameters + p + table tr:not(.param-group) td { border-bottom: none; padding: 2px 0; }
+  #parameters + p + table tr:not(.param-group) td:first-child { font-weight: 600; }
+  #parameters + p + table tr:not(.param-group) td:nth-child(2) { color: #0d9488; }
+  #parameters + p + table tr:not(.param-group) td:last-child { font-size: 13px; color: #555; }
+  #parameters + p + table tr.param-group td { padding: 14px 0 6px; }
+}
 @media (min-width: 1100px) {
   .content { margin-left: calc(50% - 260px); margin-right: auto; }
   .toc { position: fixed; top: 68px; left: calc(50% - 444px); width: 160px; border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
