@@ -1360,14 +1360,16 @@ def _inject_nav(html_path):
     )
 
     # Inject Open Graph meta tags for social sharing
-    og_tags = """\
-<meta property="og:title" content="Semantic Map of GitHub">
-<meta property="og:description" content="Interactive 2D map of the top 10,000 most-starred GitHub repositories, positioned by README similarity.">
-<meta property="og:type" content="website">
-<meta property="og:image" content="https://stevenfazzio.github.io/semantic-github-map/social-preview.png">
-<meta property="og:url" content="https://stevenfazzio.github.io/semantic-github-map/">
-<meta name="twitter:card" content="summary_large_image">
-"""
+    og_desc = "Interactive 2D map of the top 10,000 most-starred GitHub repositories, positioned by README similarity."
+    og_base = "https://stevenfazzio.github.io/semantic-github-map"
+    og_tags = (
+        '<meta property="og:title" content="Semantic Map of GitHub">\n'
+        f'<meta property="og:description" content="{og_desc}">\n'
+        '<meta property="og:type" content="website">\n'
+        f'<meta property="og:image" content="{og_base}/social-preview.png">\n'
+        f'<meta property="og:url" content="{og_base}/">\n'
+        '<meta name="twitter:card" content="summary_large_image">\n'
+    )
     html = html.replace("</head>", og_tags + "</head>", 1)
 
     # Inject Plausible analytics before </head>
