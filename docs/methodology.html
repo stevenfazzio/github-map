@@ -122,6 +122,7 @@ tr.param-group td { font-weight: 700; color: #0d9488; border-bottom: 2px solid #
     <li><a href="#using-the-visualization">Using the Visualization</a></li>
     <li><a href="#field-definitions">Field Definitions</a></li>
     <li><a href="#prior-work">Prior Work</a></li>
+    <li><a href="#acknowledgements">Acknowledgements</a></li>
     <li><a href="#limitations">Limitations</a></li>
     <li><a href="#about">About</a></li>
   </ul>
@@ -432,6 +433,43 @@ Respond with only the JSON object, no markdown fencing.</code></pre>
   via Claude Sonnet, producing labels at varying levels of detail rather than a
   single flat layer. Each approach reflects different design priorities, and
   both offer useful perspectives on the GitHub ecosystem.
+</p>
+<p>
+  At a broader level, this project belongs to a tradition of spatially mapping
+  knowledge domains. Katy B&ouml;rner's
+  <a href="https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0039464">UCSD
+  Map of Science</a>, developed with her collaborators and described in her book
+  <a href="https://www.amazon.com/Atlas-Science-Visualizing-What-Press/dp/0262014459"><em>Atlas
+  of Science</em></a>, mapped 7.2 million scientific publications across 554
+  subdisciplines using bibliometric citation networks. That work established many of
+  the ideas this project draws on &mdash; that large corpora of documents can be
+  meaningfully organized in two-dimensional space, and that the resulting maps can
+  reveal structure that is difficult to see any other way.
+</p>
+<p>
+  More recently, Leland McInnes'
+  <a href="https://lmcinnes.github.io/datamapplot_examples/arXiv/">ArXiv Data Map</a>
+  visualized 2.4 million ArXiv papers using an embed&ndash;reduce&ndash;label&ndash;render
+  pipeline that is nearly identical to the one used here. That project served as
+  a direct demonstration that the methodology &mdash; and the specific tools &mdash;
+  could produce rich, navigable maps of large document collections. This project
+  is essentially an application of the same approach to a different corpus.
+</p>
+
+<h2 id="acknowledgements">Acknowledgements <a href="#acknowledgements" class="anchor">#</a></h2>
+<p>
+  This project's pipeline is built on open-source tools created by
+  <a href="https://github.com/lmcinnes">Leland McInnes</a> and collaborators at the
+  <a href="https://github.com/TutteInstitute">Tutte Institute for Mathematics and
+  Computing</a>: <a href="https://github.com/lmcinnes/umap">UMAP</a> for
+  dimensionality reduction, <a href="https://github.com/TutteInstitute/toponymy">Toponymy</a>
+  for hierarchical topic labeling, and
+  <a href="https://github.com/TutteInstitute/datamapplot">DataMapPlot</a> for
+  interactive map rendering. McInnes'
+  <a href="https://lmcinnes.github.io/datamapplot_examples/arXiv/">ArXiv Data Map</a>
+  demonstrated that these tools, combined with modern text embeddings, could produce
+  navigable, labeled maps of millions of documents &mdash; an approach this project
+  applies to the GitHub ecosystem.
 </p>
 
 <h2 id="limitations">Limitations <a href="#limitations" class="anchor">#</a></h2>
