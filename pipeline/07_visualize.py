@@ -424,13 +424,6 @@ def main():
     owners = _esc(df["full_name"].str.split("/").str[0].values)
     hover_langs = _esc(hover_langs)
 
-    search_text = [
-        f"{fn} {title} {lang or ''} {tag} {aud} {summ}"
-        for fn, title, lang, tag, aud, summ in zip(
-            df["full_name"], project_titles, df["language"].fillna(""), taglines, target_audiences, summaries
-        )
-    ]
-
     project_type_values = project_types if has_project_type else ["Other"] * len(df)
     project_type_colors = [
         type_color_mapping.get(pt, "#8b6cc1") if has_project_type else "#8b6cc1" for pt in project_type_values
@@ -458,7 +451,6 @@ def main():
             "activity_status": activity_status,
             "license_family": license_families,
             "owner_type": owner_types if "owner_type" in df.columns else ["Unknown"] * len(df),
-            "search_text": search_text,
         }
     )
 
@@ -713,7 +705,7 @@ def main():
         sub_title="Top 10,000 most-starred repositories, mapped by README similarity"
         + (f" · Data as of {date_str}" if (date_str := _data_as_of_date()) else ""),
         enable_search=True,
-        search_field="search_text",
+        search_field="",
         custom_js=CUSTOM_JS,
         custom_css=custom_css,
         tooltip_css=tooltip_css,
@@ -754,10 +746,27 @@ def _inject_filters(html_path, df, languages):
 
     html = Path(html_path).read_text()
 
-    # 1. Dispatch datamapReady event after metadata finishes loading
+    # 1. Build search_text client-side (instead of shipping ~5 MB pre-concatenated
+    #    blob) and dispatch datamapReady after metadata finishes loading.
+    #    Injected right after addMetaData() — builds searchArray from fields
+    #    already present in the metadata, then fires the ready event.
+    build_search_js = (
+        r"// Build search index client-side from existing metadata fields\n"
+        r"          (function() {\n"
+        r"            var md = datamap.metaData, n = md.full_name.length;\n"
+        r"            var sa = new Array(n);\n"
+        r"            for (var i = 0; i < n; i++) {\n"
+        r"              sa[i] = (md.full_name[i] + ' ' + md.project_title[i] + ' '"
+        r" + (md.hover_lang[i] || '') + ' ' + md.tagline[i] + ' '"
+        r" + md.target_audience[i] + ' ' + md.summary[i]).toLowerCase();\n"
+        r"            }\n"
+        r"            datamap.searchArray = sa;\n"
+        r"          })();\n"
+        r"          "
+    )
     html = re.sub(
         r"(updateProgressBar\('meta-data-progress', 100\);\s*)(checkAllDataLoaded\(\);)",
-        r"\1window.dispatchEvent(new CustomEvent('datamapReady', "
+        r"\1" + build_search_js + r"window.dispatchEvent(new CustomEvent('datamapReady', "
         r"{ detail: { datamap, hoverData } }));\n          \2",
         html,
         count=1,
