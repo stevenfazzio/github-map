@@ -228,7 +228,7 @@ tr.param-group td { font-weight: 700; color: #0d9488; border-bottom: 2px solid #
   Each README is processed by Claude Haiku to extract five fields: a project title,
   a 2&ndash;3 sentence summary, a short tagline, a project type classification, and a
   target audience label. These feed into hover tooltips, search, colormap categories,
-  and topic labeling. Separately, the raw README text (not the summaries) is embedded
+  and topic labeling. The raw README text (not the summaries) is what gets embedded
   in step 4 to drive map placement.
 </p>
 
@@ -237,7 +237,7 @@ tr.param-group td { font-weight: 700; color: #0d9488; border-bottom: 2px solid #
 <div class="pipeline-step">
   <strong>0. Enumerate candidates</strong>
   <p>Queries GH Archive on BigQuery for repositories with significant recent star activity,
-  producing a generous candidate list (~25K repos). This step is optional &mdash; a
+  producing a generous candidate list (~25K repos). This step is optional; a
   pre-built candidate list is used automatically if this step is skipped.</p>
 </div>
 
@@ -256,7 +256,7 @@ tr.param-group td { font-weight: 700; color: #0d9488; border-bottom: 2px solid #
 <div class="pipeline-step">
   <strong>3. Summarize READMEs</strong>
   <p>Sends each README to Claude Haiku to extract a project title, short summary,
-  tagline, project type, and target audience &mdash; used for hover tooltips, search,
+  tagline, project type, and target audience, used for hover tooltips, search,
   and colormap categories.</p>
 </div>
 
@@ -370,17 +370,17 @@ Respond with only the JSON object, no markdown fencing.</code></pre>
 
 <h2 id="using-the-visualization">Using the Visualization <a href="#using-the-visualization" class="anchor">#</a></h2>
 <ul>
-  <li><strong>Pan and zoom</strong> &mdash; Click and drag to pan; scroll to zoom in and out.</li>
-  <li><strong>Hover</strong> &mdash; Hover over any point to see the project title, owner,
+  <li><strong>Pan and zoom:</strong> Click and drag to pan; scroll to zoom in and out.</li>
+  <li><strong>Hover:</strong> Hover over any point to see the project title, owner,
   tagline, project type, primary language, star and fork counts, and a short summary.</li>
-  <li><strong>Click</strong> &mdash; Click any point to open the repository on GitHub in a new tab.</li>
-  <li><strong>Search</strong> &mdash; Use the search box to find specific repositories by name.</li>
-  <li><strong>Filter panel</strong> &mdash; Open the sidebar to narrow the visible points with range
+  <li><strong>Click:</strong> Click any point to open the repository on GitHub in a new tab.</li>
+  <li><strong>Search:</strong> Use the search box to find specific repositories by name.</li>
+  <li><strong>Filter panel:</strong> Open the sidebar to narrow the visible points with range
   sliders (stars, forks, open issues, created year, days since push) and checkbox filters
   (language, activity status, license family, project type, target audience, owner type).</li>
-  <li><strong>Colormaps</strong> &mdash; Switch between colormaps using the dropdown to color points
+  <li><strong>Colormaps:</strong> Switch between colormaps using the dropdown to color points
   by language, license family, project type, target audience, activity status, owner type, creation date, last push recency, star count, fork count, or open issues.</li>
-  <li><strong>Topic labels</strong> &mdash; Cluster labels appear on the map at multiple levels of detail,
+  <li><strong>Topic labels:</strong> Cluster labels appear on the map at multiple levels of detail,
   from broad categories down to specific sub-topics. The number of levels is chosen
   automatically by the labeling algorithm.</li>
 </ul>
@@ -415,16 +415,16 @@ Respond with only the JSON object, no markdown fencing.</code></pre>
   spatially organize the open-source ecosystem.
 </p>
 <p>
-  The core methodological difference lies in what signal drives map placement.
+  The core methodological difference is what signal drives map placement.
   Anvaka's map uses a collaborative-filtering approach: it computes Jaccard
   similarity over shared stargazers, so repositories that attract the same
   people end up near each other. This project instead uses a content-based
-  signal &mdash; README text is embedded into high-dimensional vectors via
+  signal. README text is embedded into high-dimensional vectors via
   Cohere, and repositories with semantically similar descriptions are placed
   nearby after UMAP reduction. The two approaches produce meaningfully
   different groupings: anvaka's map clusters repos that appeal to the same
   audience, while this map clusters repos that describe similar functionality.
-  The projects also differ in scale, with anvaka's covering ~690K repos
+  They also differ in scale, with anvaka's covering ~690K repos
   compared to 10K here.
 </p>
 <p>
@@ -437,8 +437,7 @@ Respond with only the JSON object, no markdown fencing.</code></pre>
   assigns names to roughly 1,500 cluster "countries" using ChatGPT, while this
   project uses the Toponymy library to generate hierarchical multi-level labels
   via Claude Sonnet, producing labels at varying levels of detail rather than a
-  single flat layer. Each approach reflects different design priorities, and
-  both offer useful perspectives on the GitHub ecosystem.
+  single flat layer. Both are useful views into the same ecosystem.
 </p>
 <p>
   At a broader level, this project belongs to a tradition of spatially mapping
@@ -448,7 +447,7 @@ Respond with only the JSON object, no markdown fencing.</code></pre>
   <a href="https://www.amazon.com/Atlas-Science-Visualizing-What-Press/dp/0262014459"><em>Atlas
   of Science</em></a>, mapped 7.2 million scientific publications across 554
   subdisciplines using bibliometric citation networks. That work established many of
-  the ideas this project draws on &mdash; that large corpora of documents can be
+  the ideas this project draws on: that large corpora of documents can be
   meaningfully organized in two-dimensional space, and that the resulting maps can
   reveal structure that is difficult to see any other way.
 </p>
@@ -457,7 +456,7 @@ Respond with only the JSON object, no markdown fencing.</code></pre>
   <a href="https://lmcinnes.github.io/datamapplot_examples/arXiv/">ArXiv Data Map</a>
   visualized 2.4 million ArXiv papers using an embed&ndash;reduce&ndash;label&ndash;render
   pipeline that is nearly identical to the one used here. That project served as
-  a direct demonstration that the methodology &mdash; and the specific tools &mdash;
+  a direct demonstration that the methodology (and the specific tools)
   could produce rich, navigable maps of large document collections. This project
   is essentially an application of the same approach to a different corpus.
 </p>
@@ -474,63 +473,63 @@ Respond with only the JSON object, no markdown fencing.</code></pre>
   interactive map rendering. McInnes'
   <a href="https://lmcinnes.github.io/datamapplot_examples/arXiv/">ArXiv Data Map</a>
   demonstrated that these tools, combined with modern text embeddings, could produce
-  navigable, labeled maps of millions of documents &mdash; an approach this project
-  applies to the GitHub ecosystem.
+  navigable, labeled maps of millions of documents. This project applies that same
+  approach to the GitHub ecosystem.
 </p>
 
 <h2 id="limitations">Limitations <a href="#limitations" class="anchor">#</a></h2>
 <p>
   This is <em>a</em> map of GitHub, not <em>the</em> map of GitHub. As with any
   map, <a href="https://en.wikipedia.org/wiki/Map%E2%80%93territory_relation">the map is
-  not the territory</a> &mdash; it is a projection shaped by specific choices about what
+  not the territory</a>. It's a projection shaped by specific choices about what
   to measure, how to measure it, and how to render the result. To paraphrase
   <a href="https://en.wikipedia.org/wiki/All_models_are_wrong">George Box</a>:
-  all models are wrong, but some are useful. This map is designed to hopefully be useful,
-  but it is worth understanding where it falls short.
+  all models are wrong, but some are useful. I think this map is useful,
+  but it's worth understanding where it falls short.
 </p>
 
 <ul>
-  <li><strong>Embedding model dependence</strong> &mdash; The embedding model is the single
-  biggest determinant of what "similarity" means on this map. Every downstream step &mdash;
-  UMAP layout, clustering, topic labels &mdash; inherits the geometry it defines. Cohere's
+  <li><strong>Embedding model dependence.</strong> The embedding model is the single
+  biggest determinant of what "similarity" means on this map. Every downstream step
+  (UMAP layout, clustering, topic labels) inherits the geometry it defines. Cohere's
   embed-v4.0 was trained on general web and document data, so it captures natural-language
   similarity well but may underweight signals a developer would consider important: code
   snippets in READMEs, architectural patterns, or dependency relationships. A different
-  embedding model &mdash; especially a code-aware one &mdash; could produce a meaningfully
+  embedding model, especially a code-aware one, could produce a meaningfully
   different map from the same inputs.</li>
 
-  <li><strong>Selection bias</strong> &mdash; The map includes only the top 10,000 repositories
+  <li><strong>Selection bias.</strong> The map includes only the top 10,000 repositories
   by star count. Stars correlate with visibility, marketing, and English-language documentation,
   so the map systematically underrepresents non-English projects, niche domain-specific tools,
-  and newer repositories that have not yet accumulated stars.</li>
+  and newer repositories that haven't yet accumulated stars.</li>
 
-  <li><strong>README-driven placement</strong> &mdash; Repositories are positioned by what their
+  <li><strong>README-driven placement.</strong> Repositories are positioned by what their
   README <em>says</em>, not by what their code <em>does</em>. A repository with a sparse or
   misleading README will be misplaced, and READMEs shorter than 200 characters are excluded
-  entirely. Additionally, the embedding model's attention is not uniform across a long document
-  &mdash; content near the beginning of a README likely has more influence on placement than
+  entirely. The embedding model's attention also isn't uniform across a long document;
+  content near the beginning of a README likely has more influence on placement than
   content deeper in the file.</li>
 
-  <li><strong>Dimensionality reduction artifacts</strong> &mdash; UMAP does a good job preserving
+  <li><strong>Dimensionality reduction artifacts.</strong> UMAP does a good job preserving
   both local and global structure, but projecting 512 dimensions onto 2 inevitably loses
   information. Nearby points on the map genuinely have similar READMEs, and the relative
   positions of clusters are broadly meaningful, but inter-cluster distances should not be
   read as precise measurements of dissimilarity.</li>
 
-  <li><strong>LLM-generated content</strong> &mdash; Both the per-repo summaries (Claude Haiku)
+  <li><strong>LLM-generated content.</strong> Both the per-repo summaries (Claude Haiku)
   and the topic labels (Claude Sonnet via Toponymy) are generated by LLMs without human review.
-  They can oversimplify, miscategorize, or occasionally hallucinate details that are not
-  present in the source README.</li>
+  They can oversimplify, miscategorize, or occasionally hallucinate details that aren't
+  in the source README.</li>
 
-  <li><strong>Point-in-time snapshot</strong> &mdash; The map reflects a single moment. Star
+  <li><strong>Point-in-time snapshot.</strong> The map reflects a single moment. Star
   counts, README content, activity status, and even repository existence all change over time.
-  There is no mechanism for incremental updates &mdash; regenerating the map requires rerunning
+  There's no mechanism for incremental updates; regenerating the map requires rerunning
   the full pipeline.</li>
 
-  <li><strong>Proprietary tooling</strong> &mdash; There is some irony in using proprietary,
-  closed-source tools &mdash; Cohere's embedding model and Anthropic's LLMs &mdash; to build
+  <li><strong>Proprietary tooling.</strong> There is some irony in using proprietary,
+  closed-source tools (Cohere's embedding model and Anthropic's LLMs) to build
   a map of notable open-source projects. These choices were made for quality and convenience,
-  but they mean the pipeline cannot be fully reproduced without access to commercial APIs, and
+  but they mean the pipeline can't be fully reproduced without access to commercial APIs, and
   the embedding and labeling behavior is opaque.</li>
 </ul>
 
@@ -538,7 +537,7 @@ Respond with only the JSON object, no markdown fencing.</code></pre>
 <ul>
   <li><strong>Author:</strong> <a href="https://github.com/stevenfazzio">Steven Fazzio</a></li>
   <li><strong>Source code:</strong> <a href="https://github.com/stevenfazzio/semantic-github-map">stevenfazzio/semantic-github-map</a></li>
-  <li><strong>Feedback:</strong> Bug reports and feature requests are welcome &mdash; please <a href="https://github.com/stevenfazzio/semantic-github-map/issues">open an issue</a></li>
+  <li><strong>Feedback:</strong> Bug reports and feature requests are welcome. Please <a href="https://github.com/stevenfazzio/semantic-github-map/issues">open an issue</a></li>
   <li><strong>License:</strong> <a href="https://github.com/stevenfazzio/semantic-github-map/blob/main/LICENSE">MIT License</a></li>
 </ul>
 
