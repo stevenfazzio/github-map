@@ -20,7 +20,7 @@ QUERY = """\
 SELECT repo.name AS full_name, COUNT(*) AS star_events
 FROM `githubarchive.month.*`
 WHERE type = 'WatchEvent'
-  AND _TABLE_SUFFIX BETWEEN '202201' AND '202603'
+  AND _TABLE_SUFFIX BETWEEN '202201' AND '202604'
 GROUP BY full_name
 HAVING star_events >= 200
 ORDER BY star_events DESC
