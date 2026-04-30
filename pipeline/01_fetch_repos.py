@@ -10,10 +10,13 @@ Reads candidate repo names from data/candidates.csv (produced by
 
 import csv
 import json
+import os
 import shutil
+import tempfile
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 
 import pandas as pd
 import requests
@@ -284,8 +287,31 @@ def _fetch_readme_batch(repos: list[str]) -> dict[str, str]:
     return readmes
 
 
-def _fetch_concurrent(items, batch_size, fetch_fn, desc, combine_fn):
-    """Generic concurrent batch fetcher with checkpointing."""
+def _safe_write_parquet(df: pd.DataFrame, path) -> None:
+    """Atomic parquet write: write to a tmp file in the same directory, then rename."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_fd, tmp_path = tempfile.mkstemp(
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+    )
+    os.close(tmp_fd)
+    try:
+        df.to_parquet(tmp_path, index=False)
+        os.replace(tmp_path, path)
+    except Exception:
+        Path(tmp_path).unlink(missing_ok=True)
+        raise
+
+
+def _fetch_concurrent(items, batch_size, fetch_fn, desc, combine_fn, on_batch=None):
+    """Generic concurrent batch fetcher.
+
+    on_batch: optional callback (batch_index, result) -> None invoked under the
+    progress lock as each batch completes. Callers use this to merge batch
+    results into a shared cache and trigger periodic checkpoint writes.
+    """
     batches = []
     for i in range(0, len(items), batch_size):
         batches.append(items[i : i + batch_size])
@@ -296,6 +322,7 @@ def _fetch_concurrent(items, batch_size, fetch_fn, desc, combine_fn):
     with tqdm(total=len(items), desc=desc) as pbar:
         with ThreadPoolExecutor(max_workers=CONCURRENT_REQUESTS) as executor:
             futures = {executor.submit(fetch_fn, batch): batch for batch in batches}
+            completed = 0
             for future in as_completed(futures):
                 batch = futures[future]
                 try:
@@ -306,6 +333,9 @@ def _fetch_concurrent(items, batch_size, fetch_fn, desc, combine_fn):
                 with lock:
                     results.append(result)
                     pbar.update(len(batch))
+                    if on_batch is not None:
+                        on_batch(completed, result)
+                    completed += 1
 
     return results
 
@@ -332,14 +362,7 @@ def main():
     print(f"Pass 1 — metadata: {len(need_metadata)} candidates to fetch")
 
     if need_metadata:
-        batch_results = _fetch_concurrent(
-            need_metadata,
-            METADATA_BATCH_SIZE,
-            _fetch_metadata_batch,
-            "Fetching metadata",
-            list,
-        )
-        for batch_rows in batch_results:
+        def _merge_metadata(completed_index, batch_rows):
             for r in batch_rows:
                 name = r["full_name"]
                 if name in existing_rows:
@@ -347,10 +370,23 @@ def main():
                         if col not in r:
                             r[col] = val
                 existing_rows[name] = r
+            if (completed_index + 1) % CHECKPOINT_EVERY == 0:
+                df_meta = pd.DataFrame(list(existing_rows.values()))
+                _safe_write_parquet(df_meta, METADATA_PARQUET)
 
-    # Save full metadata cache (preserves all candidates for re-selection)
+        _fetch_concurrent(
+            need_metadata,
+            METADATA_BATCH_SIZE,
+            _fetch_metadata_batch,
+            "Fetching metadata",
+            list,
+            on_batch=_merge_metadata,
+        )
+
+    # Final write covers any trailing partial chunk and runs even when no
+    # metadata was needed (e.g. a resumed run that's already complete).
     df_meta = pd.DataFrame(list(existing_rows.values()))
-    df_meta.to_parquet(METADATA_PARQUET, index=False)
+    _safe_write_parquet(df_meta, METADATA_PARQUET)
     print(f"Pass 1 complete: {len(existing_rows)} total repos in metadata cache")
 
     # --- Sort all repos by stars ---
@@ -370,21 +406,26 @@ def main():
     print(f"Pass 2 — READMEs: {len(need_readme)} repos need READMEs (pool: {pool_size})")
 
     if need_readme:
-        batch_results = _fetch_concurrent(
+        def _merge_readmes(completed_index, readme_map):
+            for name, text in readme_map.items():
+                if name in existing_rows:
+                    existing_rows[name]["readme"] = text
+            if (completed_index + 1) % CHECKPOINT_EVERY == 0:
+                df_meta = pd.DataFrame(list(existing_rows.values()))
+                _safe_write_parquet(df_meta, METADATA_PARQUET)
+
+        _fetch_concurrent(
             need_readme,
             GRAPHQL_BATCH_SIZE,
             _fetch_readme_batch,
             "Fetching READMEs",
             dict,
+            on_batch=_merge_readmes,
         )
-        for readme_map in batch_results:
-            for name, text in readme_map.items():
-                if name in existing_rows:
-                    existing_rows[name]["readme"] = text
 
-        # Update metadata cache with READMEs
+        # Final write covers the trailing partial chunk
         df_meta = pd.DataFrame(list(existing_rows.values()))
-        df_meta.to_parquet(METADATA_PARQUET, index=False)
+        _safe_write_parquet(df_meta, METADATA_PARQUET)
 
     # --- Final selection: top N repos with usable READMEs ---
     # Filter out empty and very short READMEs (< 200 chars) so downstream
@@ -405,7 +446,7 @@ def main():
     print(f"Selected {len(final_rows)} repos with READMEs (min stars: {min_stars})")
 
     df = pd.DataFrame(final_rows)
-    df.to_parquet(REPOS_PARQUET, index=False)
+    _safe_write_parquet(df, REPOS_PARQUET)
     print(f"Done. Saved {len(df)} repos to {REPOS_PARQUET}")
 
 

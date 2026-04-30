@@ -17,6 +17,7 @@ _extract_readme = fetch_repos._extract_readme
 _parse_metadata = fetch_repos._parse_metadata
 _build_batch_query = fetch_repos._build_batch_query
 _build_readme_fragment = fetch_repos._build_readme_fragment
+_safe_write_parquet = fetch_repos._safe_write_parquet
 README_ALIASES = fetch_repos.README_ALIASES
 METADATA_FRAGMENT = fetch_repos.METADATA_FRAGMENT
 README_FRAGMENT = fetch_repos.README_FRAGMENT
@@ -149,3 +150,41 @@ class TestBuildReadmeFragment:
         fragment = _build_readme_fragment()
         assert fragment.startswith("fragment ReadmeFields on Repository {")
         assert fragment.endswith("}")
+
+
+class TestSafeWriteParquet:
+    def test_writes_new_file(self, tmp_path):
+        import pandas as pd
+
+        path = tmp_path / "data.parquet"
+        df = pd.DataFrame({"a": [1, 2, 3]})
+        _safe_write_parquet(df, path)
+        assert path.exists()
+        assert pd.read_parquet(path)["a"].tolist() == [1, 2, 3]
+
+    def test_overwrites_existing_atomically(self, tmp_path):
+        import pandas as pd
+
+        path = tmp_path / "data.parquet"
+        _safe_write_parquet(pd.DataFrame({"a": [1]}), path)
+        _safe_write_parquet(pd.DataFrame({"a": [2, 3]}), path)
+        assert pd.read_parquet(path)["a"].tolist() == [2, 3]
+
+    def test_failure_does_not_clobber_existing(self, tmp_path, monkeypatch):
+        import pandas as pd
+
+        path = tmp_path / "data.parquet"
+        _safe_write_parquet(pd.DataFrame({"a": [1]}), path)
+
+        class _Boom(pd.DataFrame):
+            def to_parquet(self, *_args, **_kwargs):
+                raise RuntimeError("simulated write failure")
+
+        try:
+            _safe_write_parquet(_Boom({"a": [99]}), path)
+        except RuntimeError:
+            pass
+        # Existing file should still hold the original data
+        assert pd.read_parquet(path)["a"].tolist() == [1]
+        # No leftover .tmp files
+        assert not list(tmp_path.glob(".*.tmp"))
