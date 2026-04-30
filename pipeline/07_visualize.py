@@ -78,13 +78,20 @@ def _data_as_of_date():
 
 
 def _inject_data_date(html):
-    """Replace <!-- DATA_AS_OF --> placeholder with a date paragraph, or remove it."""
+    """Replace the <!-- DATA_AS_OF --> placeholder (or a previously-substituted
+    data-date paragraph) with a fresh date paragraph, or remove it.
+
+    Idempotent so the source file can be re-stamped on every refresh: the
+    placeholder gets consumed on first run, the paragraph it became gets
+    re-substituted on subsequent runs.
+    """
     date_str = _data_as_of_date()
     if date_str:
         replacement = f'<p class="data-date">Data as of {date_str}</p>'
     else:
         replacement = ""
-    return html.replace("<!-- DATA_AS_OF -->", replacement)
+    pattern = r'<!-- DATA_AS_OF -->|<p class="data-date">Data as of [^<]*</p>'
+    return re.sub(pattern, replacement, html)
 
 
 def _inject_map_data_date(html_path):
