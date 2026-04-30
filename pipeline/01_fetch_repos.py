@@ -362,6 +362,7 @@ def main():
     print(f"Pass 1 — metadata: {len(need_metadata)} candidates to fetch")
 
     if need_metadata:
+
         def _merge_metadata(completed_index, batch_rows):
             for r in batch_rows:
                 name = r["full_name"]
@@ -406,6 +407,7 @@ def main():
     print(f"Pass 2 — READMEs: {len(need_readme)} repos need READMEs (pool: {pool_size})")
 
     if need_readme:
+
         def _merge_readmes(completed_index, readme_map):
             for name, text in readme_map.items():
                 if name in existing_rows:
