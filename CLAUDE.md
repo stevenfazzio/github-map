@@ -23,7 +23,14 @@ python pipeline/04_embed_readmes.py            # Embed READMEs via Cohere → em
 python pipeline/05_reduce_umap.py              # UMAP 512-dim → 2D → umap_coords.npz
 python pipeline/06_label_topics.py             # Toponymy + Claude Sonnet topic labels → labels.parquet
 python pipeline/07_visualize.py                # DataMapPlot interactive HTML → data/github_map.html + docs/index.html
+python pipeline/08_fetch_dependencies.py       # GraphQL dep-graph crawl → data/dependencies.parquet + dependency_sources.parquet
+python pipeline/09_enrich_external.py          # Cheap metadata for out-of-set targets → data/external_repos.parquet
+python pipeline/10_build_graph.py              # Unified node + edge tables → data/nodes.parquet + edges.parquet
 ```
+
+Stages 08-10 are an exploratory branch separate from the main visualization
+pipeline (00-07): they produce a dependency graph dataset for offline analysis,
+not visualization output.
 
 **Two-phase fetch approach:** Step 00 queries GH Archive on BigQuery for repos with significant recent star activity, producing a generous candidate list (~25K). Step 01 then looks up each candidate via `repository(owner:, name:)` GraphQL queries (batched 50 per request), sorts by stars, and keeps the top 10K. This avoids the Search API's 1,000-result cap and non-deterministic ordering.
 
@@ -69,7 +76,11 @@ candidates.csv ──> metadata.parquet ──> repos.parquet ──┬──> e
 
 ## Data Directory
 
-All outputs go to `data/` (gitignored). Key files: `candidates.csv`, `metadata.parquet`, `repos.parquet`, `repos_pretrim.parquet` (backup of repos.parquet before trimming to top 10K), `embeddings.npz`, `umap_coords.npz`, `labels.parquet`, `toponymy_model.joblib`, `github_map.html`.
+All outputs go to `data/` (gitignored). Key files: `candidates.csv`, `metadata.parquet`, `repos.parquet`, `repos_pretrim.parquet` (backup of repos.parquet before trimming to top 10K), `embeddings.npz`, `umap_coords.npz`, `labels.parquet`, `toponymy_model.joblib`, `github_map.html`. Dependency graph (stages 08-10): `dependencies.parquet`, `dependency_sources.parquet`, `external_repos.parquet`, `nodes.parquet`, `edges.parquet`.
+
+## Dependency Graph Data (stages 08-10)
+
+Stage 08 caps each source repo at 30 manifests (`MAX_MANIFEST_PAGES = 10` * `MANIFEST_FIRST = 3`) to prevent monorepos like microsoft/vscode (220 manifests, mostly `.github/workflows/*.yml`) from blocking workers for many minutes. The cap drops mostly redundant ACTIONS workflow edges in the long tail. `dependency_sources.parquet` records per-source provenance: `was_truncated == True` means the cap fired; `status == "timedout"` with `manifest_pages_fetched > 0` means GitHub's index gave up partway. See the `pipeline/08_fetch_dependencies.py` docstring for the full coverage-state taxonomy.
 
 ## Visualization Details
 
